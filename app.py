@@ -60,8 +60,8 @@ coords_guerrero = {
 # ------------ FUNCIÓN GENERAR FOLIO GUERRERO ------------
 def generar_folio_guerrero():
     letras = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    inicio_letras = "GR"
-    inicio_num = 2364
+    inicio_letras = "SR"
+    inicio_num = 1928
 
     existentes = supabase.table("folios_registrados").select("folio").eq("entidad", "Guerrero").execute().data
     usados = [r["folio"] for r in existentes if r["folio"] and len(r["folio"]) == 6 and r["folio"][:2].isalpha()]
@@ -79,7 +79,7 @@ def generar_folio_guerrero():
                 nuevo = f"{par}{str(num).zfill(4)}"
                 if nuevo not in usados:
                     return nuevo
-    return "GR9999"  # Fallback
+    return "SR9999"  # Fallback
 
 # ------------ FSM STATES ------------
 class PermisoForm(StatesGroup):
