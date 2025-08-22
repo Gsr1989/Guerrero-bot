@@ -58,14 +58,12 @@ coords_guerrero = {
     "rot_nombre": (115,205,8,(0,0,0))
 }
 
-# ------------ FUNCIÓN GENERAR FOLIO GUERRERO CON AUTO-INCREMENTO ------------
-def generar_folio_guerrero_inteligente():
-    """Genera folio único automáticamente, saltando duplicados"""
+# ------------ FUNCIÓN GENERAR FOLIO GUERRERO (MEJORADA PARA EVITAR DUPLICADOS) ------------
+def generar_folio_guerrero():
     letras = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     inicio_letras = "SR"
     inicio_num = 1928
 
-    # Obtener todos los folios existentes
     try:
         existentes = supabase.table("folios_registrados").select("folio").eq("entidad", "Guerrero").execute().data
         usados = set([r["folio"] for r in existentes if r["folio"] and len(r["folio"]) == 6 and r["folio"][:2].isalpha()])
@@ -83,23 +81,10 @@ def generar_folio_guerrero_inteligente():
                         empezar = True
                     else:
                         continue
-                
                 nuevo = f"{par}{str(num).zfill(4)}"
-                # Si no está usado, lo devolvemos inmediatamente
                 if nuevo not in usados:
                     return nuevo
-                # Si está usado, continúa automáticamente al siguiente
-    
-    return "ZZ9999"  # Fallback final
-
-def verificar_folio_duplicado(folio):
-    """Verifica si un folio ya existe en la base de datos"""
-    try:
-        resultado = supabase.table("folios_registrados").select("folio").eq("folio", folio).execute()
-        return len(resultado.data) > 0
-    except Exception as e:
-        print(f"Error verificando folio: {e}")
-        return False
+    return "ZZ9999"  # Fallback
 
 # ------------ FSM STATES ------------
 class PermisoForm(StatesGroup):
@@ -188,7 +173,7 @@ def generar_pdf_bueno(serie: str, fecha: datetime, folio: str) -> str:
     
     return filename
 
-# ------------ HANDLERS CON DIÁLOGOS NIVEL MADURO ------------
+# ------------ HANDLERS CON DIÁLOGOS CHINGONES ------------
 @dp.message(Command("start"))
 async def start_cmd(message: types.Message, state: FSMContext):
     await state.clear()
@@ -219,7 +204,7 @@ async def permiso_cmd(message: types.Message, state: FSMContext):
 
 @dp.message(PermisoForm.marca)
 async def get_marca(message: types.Message, state: FSMContext):
-    marca = message.text.strip().upper()
+    marca = message.text.strip().upper()  # MAYÚSCULAS AUTOMÁTICO
     await state.update_data(marca=marca)
     
     frases_marca = [
@@ -236,7 +221,7 @@ async def get_marca(message: types.Message, state: FSMContext):
 
 @dp.message(PermisoForm.linea)
 async def get_linea(message: types.Message, state: FSMContext):
-    linea = message.text.strip().upper()
+    linea = message.text.strip().upper()  # MAYÚSCULAS AUTOMÁTICO
     await state.update_data(linea=linea)
     
     frases_linea = [
@@ -283,7 +268,7 @@ async def get_anio(message: types.Message, state: FSMContext):
 
 @dp.message(PermisoForm.serie)
 async def get_serie(message: types.Message, state: FSMContext):
-    serie = message.text.strip().upper()
+    serie = message.text.strip().upper()  # MAYÚSCULAS AUTOMÁTICO
     await state.update_data(serie=serie)
     
     frases_serie = [
@@ -300,7 +285,7 @@ async def get_serie(message: types.Message, state: FSMContext):
 
 @dp.message(PermisoForm.motor)
 async def get_motor(message: types.Message, state: FSMContext):
-    motor = message.text.strip().upper()
+    motor = message.text.strip().upper()  # MAYÚSCULAS AUTOMÁTICO
     await state.update_data(motor=motor)
     
     frases_motor = [
@@ -317,7 +302,7 @@ async def get_motor(message: types.Message, state: FSMContext):
 
 @dp.message(PermisoForm.color)
 async def get_color(message: types.Message, state: FSMContext):
-    color = message.text.strip().upper()
+    color = message.text.strip().upper()  # MAYÚSCULAS AUTOMÁTICO
     await state.update_data(color=color)
     
     frases_color = [
@@ -335,10 +320,10 @@ async def get_color(message: types.Message, state: FSMContext):
 @dp.message(PermisoForm.nombre)
 async def get_nombre(message: types.Message, state: FSMContext):
     datos = await state.get_data()
-    datos["nombre"] = message.text.strip().upper()  # FORZAR MAYÚSCULAS
+    datos["nombre"] = message.text.strip().upper()  # MAYÚSCULAS AUTOMÁTICO
     
-    # Generar folio único automáticamente (ya maneja duplicados internamente)
-    datos["folio"] = generar_folio_guerrero_inteligente()
+    # Generar folio único de Guerrero (ya maneja duplicados automáticamente)
+    datos["folio"] = generar_folio_guerrero()
 
     # -------- FECHAS FORMATOS --------
     hoy = datetime.now()
@@ -450,3 +435,82 @@ async def get_nombre(message: types.Message, state: FSMContext):
         print(f"Error: {e}")
     finally:
         await state.clear()
+
+@dp.message()
+async def fallback(message: types.Message):
+    respuestas_random = [
+        "🤖 No entiendo esa orden, soldado. Use /permiso para tramitar.",
+        "⚡ Sistema no reconoce esa instrucción. /permiso es lo que necesita.",
+        "🎯 Directo al grano: /permiso para iniciar su trámite.",
+        "🔥 Aquí no hay tiempo que perder. /permiso y listo.",
+        "💀 ¿Qué parte de /permiso no entendiste?",
+        "🏛️ El Estado solo entiende /permiso. Punto."
+    ]
+    await message.answer(random.choice(respuestas_random))
+
+# ------------ FASTAPI + LIFESPAN ------------
+_keep_task = None
+
+async def keep_alive():
+    """Mantiene el bot activo con pings periódicos"""
+    while True:
+        await asyncio.sleep(600)  # 10 minutos
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _keep_task
+    
+    # Configurar webhook
+    await bot.delete_webhook(drop_pending_updates=True)
+    if BASE_URL:
+        webhook_url = f"{BASE_URL}/webhook"
+        await bot.set_webhook(webhook_url, allowed_updates=["message"])
+        print(f"Webhook configurado: {webhook_url}")
+        _keep_task = asyncio.create_task(keep_alive())
+    else:
+        print("Modo polling (sin webhook)")
+    
+    yield
+    
+    # Cleanup
+    if _keep_task:
+        _keep_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _keep_task
+    await bot.session.close()
+
+app = FastAPI(lifespan=lifespan, title="Bot Permisos Guerrero", version="1.0.0")
+
+@app.get("/")
+async def health():
+    return {
+        "status": "running",
+        "bot": "Guerrero Permisos",
+        "version": "1.0.0",
+        "webhook_configured": bool(BASE_URL),
+        "documentos_generados": 2
+    }
+
+@app.post("/webhook")
+async def telegram_webhook(request: Request):
+    try:
+        data = await request.json()
+        update = types.Update(**data)
+        await dp.feed_webhook_update(bot, update)
+        return {"ok": True}
+    except Exception as e:
+        print(f"Error en webhook: {e}")
+        return {"ok": False, "error": str(e)}
+
+@app.get("/status")
+async def bot_status():
+    try:
+        bot_info = await bot.get_me()
+        return {
+            "bot_active": True,
+            "bot_username": bot_info.username,
+            "bot_id": bot_info.id,
+            "pdfs_por_permiso": 2
+        }
+    except Exception as e:
+        return {"bot_active": False, "error": str(e)}
