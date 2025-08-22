@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+    from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
@@ -101,10 +101,10 @@ def generar_pdf_flask(folio, fecha_expedicion, fecha_vencimiento, contribuyente)
         page = doc[0]
         
         # Insertar datos en coordenadas del Flask
-        page.insert_text((700, 1750), folio, fontsize=120, fontname="helv")
-        page.insert_text((2200, 1750), fecha_expedicion.strftime('%d/%m/%Y'), fontsize=120, fontname="helv")
-        page.insert_text((4000, 1750), fecha_vencimiento.strftime('%d/%m/%Y'), fontsize=120, fontname="helv")
-        page.insert_text((950, 1930), contribuyente.upper(), fontsize=120, fontname="helv")
+        page.insert_text((700, 1750), folio, fontsize=100, fontname="helv")
+        page.insert_text((2200, 1750), fecha_expedicion.strftime('%d/%m/%Y'), fontsize=100, fontname="helv")
+        page.insert_text((4000, 1750), fecha_vencimiento.strftime('%d/%m/%Y'), fontsize=100, fontname="helv")
+        page.insert_text((950, 1930), contribuyente.upper(), fontsize=100, fontname="helv")
         
         doc.save(ruta_pdf)
         doc.close()
@@ -161,7 +161,7 @@ def generar_pdf_bueno(serie: str, fecha: datetime, folio: str) -> str:
     # Imprimir fecha+hora y serie
     page.insert_text((135.02, 193.88), fecha_hora_str, fontsize=6)
     page.insert_text((190, 324), serie, fontsize=6)
-    
+
     filename = f"{OUTPUT_DIR}/{folio}_bueno.pdf"
     doc.save(filename)
     doc.close()
