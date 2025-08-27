@@ -152,7 +152,7 @@ coords_guerrero = {
 def generar_folio_guerrero():
     letras = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     inicio_letras = "SR"
-    inicio_num = 1928
+    inicio_num = 2000
 
     try:
         existentes = supabase.table("folios_registrados").select("folio").eq("entidad", "Guerrero").execute().data
