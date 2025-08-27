@@ -37,6 +37,7 @@ dp = Dispatcher(storage=storage)
 # ------------ TIMER MANAGEMENT - AUTOELIMINACIÓN A LAS 2 HORAS ------------
 timers_activos = {}  # {folio: {"task": task, "user_id": user_id, "start_time": datetime}}
 user_folios = {}     # {user_id: [lista_de_folios_activos]}
+pending_comprobantes = {}  # {user_id: folio} para usuarios esperando especificar folio
 
 async def eliminar_folio_automatico(folio: str):
     """Elimina folio automáticamente después de 2 horas"""
@@ -534,6 +535,134 @@ async def get_serie(message: types.Message, state: FSMContext):
         f"Excelente. Proporcione el NÚMERO DE MOTOR:",
         
         f"💾 SERIE ALMACENADA: {serie}\n\n"
+        f"Muy bien. Ingrese el NÚMERO DE MOTOR del vehículo:"
+    ]
+    await message.answer(random.choice(frases_serie))
+    await state.set_state(PermisoForm.motor)
+
+@dp.message(PermisoForm.motor)
+async def get_motor(message: types.Message, state: FSMContext):
+    motor = message.text.strip().upper()
+    
+    if len(motor) < 5:
+        frases_error = [
+            "⚠️ NÚMERO DE MOTOR INCOMPLETO\n\n"
+            "El número de motor debe tener al menos 5 caracteres.\n"
+            "Por favor, verifique que haya ingresado la información completa.\n\n"
+            "Intente nuevamente:",
+            
+            "❌ MOTOR INSUFICIENTE\n\n"
+            "Mínimo requerido: 5 caracteres para el número de motor.\n"
+            "Verifique la información en su documentación.\n\n"
+            "Favor de corregir:",
+            
+            "🔍 DATO INCOMPLETO\n\n"
+            "El número de motor requiere mínimo 5 caracteres.\n"
+            "Consulte la tarjeta de circulación para el dato completo.\n\n"
+            "Proporcione información completa:"
+        ]
+        await message.answer(random.choice(frases_error))
+        return
+    
+    if len(motor) > 25:
+        frases_error_largo = [
+            "⚠️ NÚMERO DE MOTOR DEMASIADO LARGO\n\n"
+            "El número de motor no puede exceder 25 caracteres.\n"
+            "Por favor, verifique la información ingresada.\n\n"
+            "Intente nuevamente:",
+            
+            "❌ MOTOR EXCESIVO\n\n"
+            "Máximo permitido: 25 caracteres para el número de motor.\n"
+            "Revise que no haya incluido información adicional.\n\n"
+            "Favor de ajustar:",
+            
+            "🔍 LÍMITE EXCEDIDO\n\n"
+            "El número de motor no debe superar 25 caracteres.\n"
+            "Verifique que sea únicamente el número de motor.\n\n"
+            "Corrija la entrada:"
+        ]
+        await message.answer(random.choice(frases_error_largo))
+        return
+    
+    await state.update_data(motor=motor)
+    
+    frases_motor = [
+        f"✅ MOTOR REGISTRADO: {motor}\n\n"
+        f"Excelente. Ahora especifique el COLOR del vehículo:",
+        
+        f"📝 MOTOR CAPTURADO: {motor}\n\n"
+        f"Perfecto. Indique el COLOR del vehículo:",
+        
+        f"🎯 MOTOR VALIDADO: {motor}\n\n"
+        f"Correcto. Proporcione el COLOR del vehículo:",
+        
+        f"💾 MOTOR ALMACENADO: {motor}\n\n"
+        f"Muy bien. Especifique el COLOR del vehículo:"
+    ]
+    await message.answer(random.choice(frases_motor))
+    await state.set_state(PermisoForm.color)
+
+@dp.message(PermisoForm.color)
+async def get_color(message: types.Message, state: FSMContext):
+    color = message.text.strip().upper()
+    
+    if not color or len(color) < 2:
+        frases_error = [
+            "⚠️ COLOR INVÁLIDO\n\n"
+            "Por favor, ingrese un color válido del vehículo.\n"
+            "Ejemplos: BLANCO, AZUL, ROJO, NEGRO, GRIS\n\n"
+            "Intente nuevamente:",
+            
+            "❌ COLOR INCOMPLETO\n\n"
+            "Debe especificar el color del vehículo.\n"
+            "Ejemplos válidos: VERDE, AMARILLO, PLATA\n\n"
+            "Favor de corregir:",
+            
+            "🔍 INFORMACIÓN FALTANTE\n\n"
+            "Requiere color válido del vehículo.\n"
+            "Referencias: CAFÉ, NARANJA, MORADO\n\n"
+            "Proporcione el dato:"
+        ]
+        await message.answer(random.choice(frases_error))
+        return
+    
+    if len(color) > 20:
+        frases_error_largo = [
+            "⚠️ COLOR DEMASIADO LARGO\n\n"
+            "El color no puede exceder 20 caracteres.\n"
+            "Por favor, simplifique la descripción.\n\n"
+            "Intente nuevamente:",
+            
+            "❌ DESCRIPCIÓN EXCESIVA\n\n"
+            "Máximo 20 caracteres para el color.\n"
+            "Use descripciones simples como AZUL MARINO.\n\n"
+            "Favor de ajustar:",
+            
+            "🔍 LÍMITE EXCEDIDO\n\n"
+            "El color no debe superar 20 caracteres.\n"
+            "Ejemplos: ROJO, BLANCO PERLA, GRIS OXFORD\n\n"
+            "Corrija la entrada:"
+        ]
+        await message.answer(random.choice(frases_error_largo))
+        return
+    
+    await state.update_data(color=color)
+    
+    frases_color = [
+        f"✅ COLOR CONFIRMADO: {color}\n\n"
+        f"Finalmente, proporcione el NOMBRE COMPLETO del propietario del vehículo:",
+        
+        f"🎨 COLOR REGISTRADO: {color}\n\n"
+        f"Perfecto. Ahora ingrese el NOMBRE COMPLETO del titular:",
+        
+        f"🎯 COLOR VALIDADO: {color}\n\n"
+        f"Excelente. Especifique el NOMBRE COMPLETO del propietario:",
+        
+        f"💾 COLOR CAPTURADO: {color}\n\n"
+        f"Muy bien. Proporcione el NOMBRE COMPLETO del titular del vehículo:"
+    ]
+    await message.answer(random.choice(frases_color))
+    await state.set_state(PermisoForm.nombre)
 
 @dp.message(PermisoForm.nombre)
 async def get_nombre(message: types.Message, state: FSMContext):
@@ -742,6 +871,7 @@ async def recibir_comprobante(message: types.Message):
         # Si tiene varios folios, preguntar cuál
         if len(folios_usuario) > 1:
             lista_folios = '\n'.join([f"• {folio}" for folio in folios_usuario])
+            pending_comprobantes[user_id] = "waiting_folio"
             await message.answer(
                 f"📄 MÚLTIPLES FOLIOS ACTIVOS\n\n"
                 f"Tiene {len(folios_usuario)} folios pendientes de pago:\n\n"
@@ -809,6 +939,63 @@ async def recibir_comprobante(message: types.Message):
             "Por favor, intente enviar nuevamente la fotografía de su comprobante.\n\n"
             "Si el problema persiste, contacte al soporte técnico."
         )
+
+# Handler para cuando el usuario especifica el folio para el comprobante
+@dp.message(lambda message: message.from_user.id in pending_comprobantes and pending_comprobantes[message.from_user.id] == "waiting_folio")
+async def especificar_folio_comprobante(message: types.Message):
+    try:
+        user_id = message.from_user.id
+        folio_especificado = message.text.strip().upper()
+        
+        folios_usuario = obtener_folios_usuario(user_id)
+        
+        if folio_especificado not in folios_usuario:
+            await message.answer(
+                f"❌ FOLIO NO ENCONTRADO\n\n"
+                f"El folio '{folio_especificado}' no está en sus folios activos.\n\n"
+                f"Sus folios activos son:\n" + 
+                '\n'.join([f"• {f}" for f in folios_usuario]) +
+                f"\n\nPor favor, verifique e ingrese un folio válido:"
+            )
+            return
+        
+        # Folio válido - cancelar timer
+        cancelar_timer_folio(folio_especificado)
+        
+        # Limpiar estado pending
+        del pending_comprobantes[user_id]
+        
+        # Actualizar en base de datos
+        try:
+            supabase.table("folios_registrados").update({
+                "estado": "COMPROBANTE_ENVIADO",
+                "fecha_comprobante": datetime.now().isoformat()
+            }).eq("folio", folio_especificado).execute()
+            
+            await message.answer(
+                f"✅ FOLIO CONFIRMADO Y COMPROBANTE PROCESADO\n\n"
+                f"📄 Folio: {folio_especificado}\n"
+                f"📸 Su comprobante ha sido asociado correctamente\n"
+                f"⏰ Timer de eliminación automática detenido\n\n"
+                f"🔍 Su comprobante está siendo verificado.\n"
+                f"Una vez validado el pago, su permiso quedará activo.\n\n"
+                f"Ahora puede enviar el comprobante de pago como imagen."
+            )
+            
+        except Exception as e:
+            print(f"Error actualizando estado: {e}")
+            await message.answer(
+                f"✅ FOLIO CONFIRMADO\n\n"
+                f"📄 Folio: {folio_especificado}\n"
+                f"⏰ Timer detenido\n\n"
+                f"Ahora envíe la imagen del comprobante de pago."
+            )
+            
+    except Exception as e:
+        print(f"[ERROR] especificar_folio_comprobante: {e}")
+        if user_id in pending_comprobantes:
+            del pending_comprobantes[user_id]
+        await message.answer("❌ Error procesando el folio. Intente nuevamente.")
 
 # Comando para ver folios activos
 @dp.message(Command("folios"))
@@ -995,4 +1182,4 @@ if __name__ == '__main__':
         print(f"[CONFIG] Costo: $50 MXN - Vigencia: 30 días - Auto-eliminación: 2 horas")
         uvicorn.run(app, host="0.0.0.0", port=port)
     except Exception as e:
-        print(f"[ERROR FATAL] No se pudo iniciar el servidor: {e}"
+        print(f"[ERROR FATAL] No se pudo iniciar el servidor: {e}")
