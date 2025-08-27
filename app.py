@@ -4,7 +4,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
-from aiogram.types import FSInputFile
+from aiogram.types import FSInputFile, ContentType
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta
 from supabase import create_client, Client
@@ -33,6 +33,95 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 bot = Bot(token=BOT_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
+
+# ------------ TIMER MANAGEMENT - AUTOELIMINACIÓN A LAS 2 HORAS ------------
+timers_activos = {}  # {folio: {"task": task, "user_id": user_id, "start_time": datetime}}
+user_folios = {}     # {user_id: [lista_de_folios_activos]}
+
+async def eliminar_folio_automatico(folio: str):
+    """Elimina folio automáticamente después de 2 horas"""
+    try:
+        # Obtener user_id del folio
+        user_id = None
+        if folio in timers_activos:
+            user_id = timers_activos[folio]["user_id"]
+        
+        # Eliminar de base de datos
+        supabase.table("folios_registrados").delete().eq("folio", folio).execute()
+        
+        # Notificar al usuario si está disponible
+        if user_id:
+            await bot.send_message(
+                user_id,
+                f"TIEMPO AGOTADO\n\n"
+                f"El folio {folio} ha sido eliminado del sistema por falta de pago.\n\n"
+                f"Para tramitar un nuevo permiso utilize /permiso"
+            )
+        
+        # Limpiar timers
+        limpiar_timer_folio(folio)
+            
+    except Exception as e:
+        print(f"Error eliminando folio {folio}: {e}")
+
+async def iniciar_timer_eliminacion(user_id: int, folio: str):
+    """Inicia el timer de 2 horas para eliminación automática"""
+    async def timer_task():
+        print(f"[TIMER] Iniciado para folio {folio}, usuario {user_id}")
+        
+        # Esperar 2 horas (7200 segundos)
+        await asyncio.sleep(7200)
+        
+        # Si llegamos aquí, se acabó el tiempo - eliminar
+        if folio in timers_activos:
+            print(f"[TIMER] Expirado para folio {folio} - eliminando")
+            await eliminar_folio_automatico(folio)
+    
+    # Crear y guardar el task
+    task = asyncio.create_task(timer_task())
+    timers_activos[folio] = {
+        "task": task,
+        "user_id": user_id,
+        "start_time": datetime.now()
+    }
+    
+    # Agregar folio a la lista del usuario
+    if user_id not in user_folios:
+        user_folios[user_id] = []
+    user_folios[user_id].append(folio)
+    
+    print(f"[SISTEMA] Timer iniciado para folio {folio}, total timers activos: {len(timers_activos)}")
+
+def cancelar_timer_folio(folio: str):
+    """Cancela el timer de un folio específico cuando el usuario paga"""
+    if folio in timers_activos:
+        timers_activos[folio]["task"].cancel()
+        user_id = timers_activos[folio]["user_id"]
+        
+        # Remover de estructuras de datos
+        del timers_activos[folio]
+        
+        if user_id in user_folios and folio in user_folios[user_id]:
+            user_folios[user_id].remove(folio)
+            if not user_folios[user_id]:
+                del user_folios[user_id]
+        
+        print(f"[SISTEMA] Timer cancelado para folio {folio}")
+
+def limpiar_timer_folio(folio: str):
+    """Limpia todas las referencias de un folio tras expirar"""
+    if folio in timers_activos:
+        user_id = timers_activos[folio]["user_id"]
+        del timers_activos[folio]
+        
+        if user_id in user_folios and folio in user_folios[user_id]:
+            user_folios[user_id].remove(folio)
+            if not user_folios[user_id]:
+                del user_folios[user_id]
+
+def obtener_folios_usuario(user_id: int) -> list:
+    """Obtiene todos los folios activos de un usuario"""
+    return user_folios.get(user_id, [])
 
 # ---------------- COORDENADAS GUERRERO ----------------
 coords_guerrero = {
@@ -173,65 +262,154 @@ def generar_pdf_bueno(serie: str, fecha: datetime, folio: str) -> str:
     
     return filename
 
-# ------------ HANDLERS CON DIÁLOGOS CHINGONES ------------
+# ------------ HANDLERS CON DIÁLOGOS PROFESIONALES ------------
 @dp.message(Command("start"))
 async def start_cmd(message: types.Message, state: FSMContext):
     await state.clear()
     frases_start = [
-        "🔥 ¡Aquí está el jefe! Sistema de permisos de Guerrero.\nSomos el Estado, aquí mandamos nosotros.\nNo preguntes, solo obedece. /permiso para iniciar.",
+        "🏛️ SISTEMA DIGITAL DEL ESTADO DE GUERRERO\n"
+        "Plataforma oficial para la gestión de trámites vehiculares\n\n"
+        "💰 Inversión del servicio: $50 pesos\n"
+        "⏰ Tiempo límite para efectuar el pago: 2 horas\n"
+        "💳 Modalidades de pago: Transferencia SPIN OXXO\n\n"
+        "📋 Para iniciar su trámite, utilice el comando /permiso\n"
+        "⚠️ IMPORTANTE: Su folio será eliminado automáticamente del sistema si no realiza el pago dentro del tiempo establecido",
         
-        "⚡ Bienvenido al poder absoluto digital.\nEste sistema no falla porque nosotros no fallamos.\nEres un número más. /permiso y punto.",
+        "🏆 BIENVENIDO AL SISTEMA GUBERNAMENTAL DE GUERRERO\n"
+        "Servicio digital de excelencia para ciudadanos\n\n"
+        "💼 Tarifa establecida: $50 pesos mexicanos\n"
+        "🕐 Plazo para liquidación: 120 minutos\n"
+        "🏪 Punto de pago: Establecimientos OXXO (Transferencia SPIN)\n\n"
+        "🚀 Comando de inicio: /permiso\n"
+        "📢 AVISO: Los folios no pagados se eliminan automáticamente tras el vencimiento",
         
-        "🎯 Estado de Guerrero en línea.\nTus derechos terminan donde empiezan nuestras reglas.\nO cooperas o te chingas. /permiso ahora.",
-        
-        "💀 Sistema gubernamental operativo.\nNo estás pidiendo favores, estás cumpliendo órdenes.\nEl trámite se hace como nosotros decimos. /permiso."
+        "⚡ PORTAL DIGITAL - ESTADO DE GUERRERO\n"
+        "Su aliado confiable en trámites vehiculares\n\n"
+        "💵 Inversión requerida: Cincuenta pesos ($50.00)\n"
+        "⌛ Ventana de pago: 2 horas exactas\n"
+        "🔄 Método: Transferencia SPIN en tiendas OXXO\n\n"
+        "📝 Inicie con: /permiso\n"
+        "🎯 COMPROMISO: Sistema automático, sin excepciones en tiempos"
     ]
     await message.answer(random.choice(frases_start))
 
 @dp.message(Command("permiso"))
 async def permiso_cmd(message: types.Message, state: FSMContext):
+    # Verificar folios activos del usuario
+    folios_activos = obtener_folios_usuario(message.from_user.id)
+    
+    mensaje_folios = ""
+    if folios_activos:
+        mensaje_folios = f"\n\n📋 FOLIOS ACTIVOS: {', '.join(folios_activos)}\n(Cada folio tiene su propio timer independiente de 2 horas)"
+    
     frases_inicio = [
-        "🚗 Perfecto. Ahora trabajas para nosotros.\nMarca del vehículo. Rápido:",
+        f"🚗 SOLICITUD DE PERMISO DE CIRCULACIÓN - GUERRERO\n\n"
+        f"📋 Inversión: $50 pesos mexicanos\n"
+        f"⏰ Plazo para el pago: 2 horas\n"
+        f"💼 Concepto de pago: Número de folio asignado\n\n"
+        f"Al proceder, usted acepta que el folio será eliminado si no efectúa el pago en el tiempo estipulado."
+        f"{mensaje_folios}\n\n"
+        f"Para comenzar, por favor indique la MARCA de su vehículo:",
         
-        "⚙️ El proceso ha comenzado, soldado.\nEscribe la marca del vehículo sin mamadas:",
+        f"🏛️ TRÁMITE DE PERMISO VEHICULAR - ESTADO DE GUERRERO\n\n"
+        f"💰 Tarifa oficial: $50.00 MXN\n"
+        f"🕐 Tiempo límite: 120 minutos\n"
+        f"📋 Modalidad: Pago contra folio único\n\n"
+        f"Acepta los términos de eliminación automática por falta de pago."
+        f"{mensaje_folios}\n\n"
+        f"Proporcione la MARCA del vehículo a registrar:",
         
-        "🔧 Te vamos a procesar como se debe.\nMarca del vehículo, ya:",
-        
-        "📋 Sistema activado. Eres nuestro ahora.\nDame la marca del vehículo:"
+        f"⚡ GESTIÓN DE PERMISO - GUERRERO DIGITAL\n\n"
+        f"🎯 Costo: Cincuenta pesos mexicanos\n"
+        f"⌛ Ventana de pago: 2 horas exactas\n"
+        f"🔒 Sistema: Folio único intransferible\n\n"
+        f"Confirma aceptación de políticas de eliminación automática."
+        f"{mensaje_folios}\n\n"
+        f"Ingrese la MARCA de su vehículo:"
     ]
     await message.answer(random.choice(frases_inicio))
     await state.set_state(PermisoForm.marca)
 
 @dp.message(PermisoForm.marca)
 async def get_marca(message: types.Message, state: FSMContext):
-    marca = message.text.strip().upper()  # MAYÚSCULAS AUTOMÁTICO
+    marca = message.text.strip().upper()
+    
+    if not marca or len(marca) < 2:
+        frases_error = [
+            "⚠️ MARCA INVÁLIDA\n\n"
+            "Por favor, ingrese una marca válida de al menos 2 caracteres.\n"
+            "Ejemplos: NISSAN, TOYOTA, HONDA, VOLKSWAGEN\n\n"
+            "Intente nuevamente:",
+            
+            "❌ FORMATO INCORRECTO\n\n"
+            "La marca del vehículo debe contener mínimo 2 caracteres.\n"
+            "Ejemplos válidos: FORD, BMW, AUDI, CHEVROLET\n\n"
+            "Favor de reintentar:",
+            
+            "🔍 DATO INSUFICIENTE\n\n"
+            "Requiere especificar marca con al menos 2 caracteres.\n"
+            "Referencias: MAZDA, KIA, HYUNDAI, JEEP\n\n"
+            "Ingrese nuevamente:"
+        ]
+        await message.answer(random.choice(frases_error))
+        return
+    
     await state.update_data(marca=marca)
     
     frases_marca = [
-        f"✅ {marca} - Registrado en nuestros archivos.\nAhora la línea/modelo del vehículo:",
+        f"✅ MARCA REGISTRADA: {marca}\n\n"
+        f"Excelente. Ahora proporcione la LÍNEA o MODELO del vehículo:",
         
-        f"📝 {marca} - Anotado. No se puede borrar.\nLínea del vehículo:",
+        f"📝 MARCA CONFIRMADA: {marca}\n\n"
+        f"Perfecto. Continúe con la LÍNEA/MODELO del vehículo:",
         
-        f"🎯 {marca} - En el sistema para siempre.\nAhora dime la línea:",
+        f"🎯 MARCA VALIDADA: {marca}\n\n"
+        f"Correcto. Especifique la LÍNEA o MODELO del vehículo:",
         
-        f"💾 {marca} - Guardado. Ya no hay vuelta atrás.\nLínea del vehículo:"
+        f"💾 MARCA CAPTURADA: {marca}\n\n"
+        f"Muy bien. Proporcione la LÍNEA/MODELO del vehículo:"
     ]
     await message.answer(random.choice(frases_marca))
     await state.set_state(PermisoForm.linea)
 
 @dp.message(PermisoForm.linea)
 async def get_linea(message: types.Message, state: FSMContext):
-    linea = message.text.strip().upper()  # MAYÚSCULAS AUTOMÁTICO
+    linea = message.text.strip().upper()
+    
+    if not linea or len(linea) < 1:
+        frases_error = [
+            "⚠️ LÍNEA/MODELO INVÁLIDO\n\n"
+            "Por favor, ingrese una línea o modelo válido.\n"
+            "Ejemplos: SENTRA, TSURU, AVEO, JETTA\n\n"
+            "Intente nuevamente:",
+            
+            "❌ MODELO INCOMPLETO\n\n"
+            "Debe especificar la línea o modelo del vehículo.\n"
+            "Ejemplos: CIVIC, COROLLA, FOCUS, CRUZE\n\n"
+            "Favor de corregir:",
+            
+            "🔍 INFORMACIÓN FALTANTE\n\n"
+            "Requiere línea o modelo del vehículo.\n"
+            "Referencias: ALTIMA, VERSA, MARCH, TIIDA\n\n"
+            "Proporcione el dato:"
+        ]
+        await message.answer(random.choice(frases_error))
+        return
+    
     await state.update_data(linea=linea)
     
     frases_linea = [
-        f"✅ {linea} - Procesado.\nAño del vehículo (4 dígitos, no seas pendejo):",
+        f"✅ LÍNEA CONFIRMADA: {linea}\n\n"
+        f"Perfecto. Indique el AÑO de fabricación del vehículo (formato de 4 dígitos):",
         
-        f"📊 {linea} - En la base de datos.\nAño del vehículo:",
+        f"📋 MODELO REGISTRADO: {linea}\n\n"
+        f"Excelente. Especifique el AÑO del vehículo (4 dígitos):",
         
-        f"🔒 {linea} - Capturado por el Estado.\nAño (números, no letras):",
+        f"🎯 LÍNEA VALIDADA: {linea}\n\n"
+        f"Correcto. Proporcione el AÑO de fabricación (YYYY):",
         
-        f"⚡ {linea} - Archivado permanentemente.\nDime el año:"
+        f"💾 MODELO CAPTURADO: {linea}\n\n"
+        f"Muy bien. Ingrese el AÑO del vehículo (4 dígitos):"
     ]
     await message.answer(random.choice(frases_linea))
     await state.set_state(PermisoForm.anio)
@@ -239,141 +417,253 @@ async def get_linea(message: types.Message, state: FSMContext):
 @dp.message(PermisoForm.anio)
 async def get_anio(message: types.Message, state: FSMContext):
     anio = message.text.strip()
+    
     if not anio.isdigit() or len(anio) != 4:
         frases_error = [
-            "❌ ¿En serio? Te dije 4 dígitos.\nEjemplo: 2020. No seas idiota:",
+            "⚠️ AÑO INVÁLIDO\n\n"
+            "Por favor, ingrese un año válido de 4 dígitos.\n"
+            "Ejemplo correcto: 2020, 2015, 2023\n\n"
+            "Favor de intentarlo nuevamente:",
             
-            "🤬 ¿Qué parte de '4 dígitos' no entendiste?\nAño válido:",
+            "❌ FORMATO INCORRECTO\n\n"
+            "El año debe contener exactamente 4 dígitos numéricos.\n"
+            "Ejemplos válidos: 2018, 2019, 2024\n\n"
+            "Intente de nuevo:",
             
-            "💀 Me cagaste. Año de 4 dígitos:\nEjemplo: 2015, 2020, etc.",
-            
-            "🔥 No mames. 4 números para el año:"
+            "🔍 DATO INVÁLIDO\n\n"
+            "Requiere año en formato YYYY (4 dígitos).\n"
+            "Referencias: 2016, 2017, 2022\n\n"
+            "Corrija el formato:"
         ]
         await message.answer(random.choice(frases_error))
+        return
+    
+    anio_num = int(anio)
+    if anio_num < 1980 or anio_num > datetime.now().year + 1:
+        frases_error_rango = [
+            f"⚠️ AÑO FUERA DE RANGO\n\n"
+            f"El año debe estar entre 1980 y {datetime.now().year + 1}.\n"
+            f"Año ingresado: {anio}\n\n"
+            f"Por favor, verifique e intente nuevamente:",
+            
+            f"❌ RANGO INVÁLIDO\n\n"
+            f"Años aceptados: 1980 - {datetime.now().year + 1}\n"
+            f"Su entrada: {anio} (no válida)\n\n"
+            f"Favor de corregir:",
+            
+            f"🔍 FUERA DE LÍMITES\n\n"
+            f"Rango permitido: 1980 a {datetime.now().year + 1}\n"
+            f"Valor ingresado: {anio}\n\n"
+            f"Ajuste su entrada:"
+        ]
+        await message.answer(random.choice(frases_error_rango))
         return
     
     await state.update_data(anio=anio)
     
     frases_anio = [
-        f"✅ {anio} - Confirmado.\nNúmero de serie del vehículo:",
+        f"✅ AÑO VERIFICADO: {anio}\n\n"
+        f"Muy bien. Proporcione el NÚMERO DE SERIE del vehículo:",
         
-        f"📅 {anio} - Validado por el sistema.\nSerie del vehículo:",
+        f"📅 AÑO CONFIRMADO: {anio}\n\n"
+        f"Excelente. Especifique el NÚMERO DE SERIE del vehículo:",
         
-        f"🎯 {anio} - Aceptado.\nAhora el número de serie:",
+        f"🎯 AÑO VALIDADO: {anio}\n\n"
+        f"Correcto. Ingrese el NÚMERO DE SERIE del vehículo:",
         
-        f"⚡ {anio} - Registrado.\nNúmero de serie:"
+        f"💾 AÑO REGISTRADO: {anio}\n\n"
+        f"Perfecto. Proporcione el NÚMERO DE SERIE:"
     ]
     await message.answer(random.choice(frases_anio))
     await state.set_state(PermisoForm.serie)
 
 @dp.message(PermisoForm.serie)
 async def get_serie(message: types.Message, state: FSMContext):
-    serie = message.text.strip().upper()  # MAYÚSCULAS AUTOMÁTICO
+    serie = message.text.strip().upper()
+    
+    if len(serie) < 5:
+        frases_error = [
+            "⚠️ NÚMERO DE SERIE INCOMPLETO\n\n"
+            "El número de serie debe tener al menos 5 caracteres.\n"
+            "Por favor, verifique que haya ingresado la información completa.\n\n"
+            "Intente nuevamente:",
+            
+            "❌ SERIE INSUFICIENTE\n\n"
+            "Mínimo requerido: 5 caracteres para el número de serie.\n"
+            "Verifique la información en su documentación.\n\n"
+            "Favor de corregir:",
+            
+            "🔍 DATO INCOMPLETO\n\n"
+            "El número de serie requiere mínimo 5 caracteres.\n"
+            "Consulte la tarjeta de circulación para el dato completo.\n\n"
+            "Proporcione información completa:"
+        ]
+        await message.answer(random.choice(frases_error))
+        return
+    
+    if len(serie) > 25:
+        frases_error_largo = [
+            "⚠️ NÚMERO DE SERIE DEMASIADO LARGO\n\n"
+            "El número de serie no puede exceder 25 caracteres.\n"
+            "Por favor, verifique la información ingresada.\n\n"
+            "Intente nuevamente:",
+            
+            "❌ SERIE EXCESIVA\n\n"
+            "Máximo permitido: 25 caracteres para el número de serie.\n"
+            "Revise que no haya incluido información adicional.\n\n"
+            "Favor de ajustar:",
+            
+            "🔍 LÍMITE EXCEDIDO\n\n"
+            "El número de serie no debe superar 25 caracteres.\n"
+            "Verifique que sea únicamente el número de serie.\n\n"
+            "Corrija la entrada:"
+        ]
+        await message.answer(random.choice(frases_error_largo))
+        return
+    
     await state.update_data(serie=serie)
     
     frases_serie = [
-        f"✅ Serie {serie} - En nuestros registros.\nNúmero de motor:",
+        f"✅ SERIE CAPTURADA: {serie}\n\n"
+        f"Correcto. Ahora indique el NÚMERO DE MOTOR:",
         
-        f"🔒 Serie {serie} - Propiedad del Estado.\nAhora el motor:",
+        f"📝 SERIE REGISTRADA: {serie}\n\n"
+        f"Perfecto. Especifique el NÚMERO DE MOTOR del vehículo:",
         
-        f"📝 Serie {serie} - Archivado.\nNúmero de motor:",
+        f"🎯 SERIE VALIDADA: {serie}\n\n"
+        f"Excelente. Proporcione el NÚMERO DE MOTOR:",
         
-        f"⚡ Serie {serie} - Procesado.\nMotor del vehículo:"
-    ]
-    await message.answer(random.choice(frases_serie))
-    await state.set_state(PermisoForm.motor)
-
-@dp.message(PermisoForm.motor)
-async def get_motor(message: types.Message, state: FSMContext):
-    motor = message.text.strip().upper()  # MAYÚSCULAS AUTOMÁTICO
-    await state.update_data(motor=motor)
-    
-    frases_motor = [
-        f"✅ Motor {motor} - Identificado.\nColor del vehículo:",
-        
-        f"🔧 Motor {motor} - En el sistema.\nColor:",
-        
-        f"⚙️ Motor {motor} - Catalogado.\nAhora el color:",
-        
-        f"💾 Motor {motor} - Guardado.\nColor del vehículo:"
-    ]
-    await message.answer(random.choice(frases_motor))
-    await state.set_state(PermisoForm.color)
-
-@dp.message(PermisoForm.color)
-async def get_color(message: types.Message, state: FSMContext):
-    color = message.text.strip().upper()  # MAYÚSCULAS AUTOMÁTICO
-    await state.update_data(color=color)
-    
-    frases_color = [
-        f"✅ Color {color} - Registrado.\nNombre completo del solicitante:",
-        
-        f"🎨 Color {color} - En el expediente.\nNombre completo:",
-        
-        f"📋 Color {color} - Anotado.\nAhora tu nombre completo:",
-        
-        f"⚡ Color {color} - Procesado.\nNombre del solicitante:"
-    ]
-    await message.answer(random.choice(frases_color))
-    await state.set_state(PermisoForm.nombre)
+        f"💾 SERIE ALMACENADA: {serie}\n\n"
 
 @dp.message(PermisoForm.nombre)
 async def get_nombre(message: types.Message, state: FSMContext):
     datos = await state.get_data()
-    datos["nombre"] = message.text.strip().upper()  # MAYÚSCULAS AUTOMÁTICO
+    nombre = message.text.strip().upper()
     
-    # Generar folio único de Guerrero (ya maneja duplicados automáticamente)
+    # Validar nombre
+    if len(nombre) < 5:
+        frases_error = [
+            "⚠️ NOMBRE INCOMPLETO\n\n"
+            "Por favor, ingrese el nombre completo del titular.\n"
+            "Debe incluir nombre(s) y apellido(s).\n\n"
+            "Ejemplo: JUAN PÉREZ GARCÍA\n\n"
+            "Intente nuevamente:",
+            
+            "❌ INFORMACIÓN INSUFICIENTE\n\n"
+            "Requiere nombre completo del propietario.\n"
+            "Incluya nombre y apellidos completos.\n\n"
+            "Ejemplo: MARÍA GONZÁLEZ LÓPEZ\n\n"
+            "Favor de completar:",
+            
+            "🔍 DATO INCOMPLETO\n\n"
+            "El nombre debe incluir nombre(s) y apellido(s).\n"
+            "Mínimo 5 caracteres requeridos.\n\n"
+            "Ejemplo: CARLOS MÉNDEZ RUIZ\n\n"
+            "Proporcione nombre completo:"
+        ]
+        await message.answer(random.choice(frases_error))
+        return
+    
+    if len(nombre) > 60:
+        frases_error_largo = [
+            "⚠️ NOMBRE DEMASIADO LARGO\n\n"
+            "El nombre no puede exceder 60 caracteres.\n"
+            "Por favor, verifique la información.\n\n"
+            "Intente nuevamente:",
+            
+            "❌ LÍMITE EXCEDIDO\n\n"
+            "Máximo 60 caracteres para el nombre completo.\n"
+            "Simplifique si es necesario.\n\n"
+            "Favor de ajustar:",
+            
+            "🔍 INFORMACIÓN EXCESIVA\n\n"
+            "El nombre no debe superar 60 caracteres.\n"
+            "Verifique que sea únicamente el nombre.\n\n"
+            "Corrija la entrada:"
+        ]
+        await message.answer(random.choice(frases_error_largo))
+        return
+    
+    # Verificar que tenga al menos dos palabras
+    palabras = nombre.split()
+    if len(palabras) < 2:
+        frases_error_palabras = [
+            "⚠️ NOMBRE INCOMPLETO\n\n"
+            "Por favor, proporcione al menos nombre y apellido.\n"
+            "Ejemplo: MARÍA GONZÁLEZ\n\n"
+            "Intente nuevamente:",
+            
+            "❌ INFORMACIÓN INSUFICIENTE\n\n"
+            "Debe incluir mínimo nombre y un apellido.\n"
+            "Ejemplo: JOSÉ MARTÍNEZ\n\n"
+            "Favor de completar:",
+            
+            "🔍 DATOS FALTANTES\n\n"
+            "Requiere al menos 2 palabras (nombre y apellido).\n"
+            "Ejemplo: ANA LÓPEZ\n\n"
+            "Proporcione información completa:"
+        ]
+        await message.answer(random.choice(frases_error_palabras))
+        return
+    
+    datos["nombre"] = nombre
+    
+    # Generar folio único de Guerrero
     datos["folio"] = generar_folio_guerrero()
 
-    # -------- FECHAS FORMATOS --------
+    # Fechas
     hoy = datetime.now()
-    vigencia_dias = 30  # Por defecto 30 días
+    vigencia_dias = 30
     fecha_ven = hoy + timedelta(days=vigencia_dias)
     
-    # Formatos para PDF
     datos["fecha_exp"] = hoy.strftime("%d/%m/%Y")
     datos["fecha_ven"] = fecha_ven.strftime("%d/%m/%Y")
-    
-    # Para mensajes
-    meses = {
-        1: "enero", 2: "febrero", 3: "marzo", 4: "abril",
-        5: "mayo", 6: "junio", 7: "julio", 8: "agosto",
-        9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre"
-    }
-    datos["fecha"] = f"{hoy.day} de {meses[hoy.month]} del {hoy.year}"
     datos["vigencia"] = fecha_ven.strftime("%d/%m/%Y")
-    # ---------------------------------
 
     try:
         frases_procesando = [
-            f"🔄 PROCESANDO A {datos['nombre']}\nFolio asignado: {datos['folio']}\nEl Estado trabaja...",
+            f"🔄 PROCESANDO DOCUMENTACIÓN OFICIAL...\n\n"
+            f"📄 Folio asignado: {datos['folio']}\n"
+            f"🚗 Vehículo: {datos['marca']} {datos['linea']} {datos['anio']}\n"
+            f"👤 Titular: {nombre}\n\n"
+            f"El sistema está generando su documentación. Por favor espere...",
             
-            f"⚡ EJECUTANDO ORDEN GUBERNAMENTAL\nSujeto: {datos['nombre']}\nExpediente: {datos['folio']}\nAguanta...",
+            f"⚡ GENERANDO DOCUMENTOS ESTATALES...\n\n"
+            f"🆔 Código único: {datos['folio']}\n"
+            f"🚙 Unidad: {datos['marca']} {datos['linea']} ({datos['anio']})\n"
+            f"👥 Propietario: {nombre}\n\n"
+            f"Procesando información en el sistema gubernamental...",
             
-            f"🎯 SISTEMA EN ACCIÓN\nContribuyente: {datos['nombre']}\nCódigo único: {datos['folio']}\nGenerando...",
-            
-            f"💀 MÁQUINA ESTATAL ACTIVADA\nObjetivo: {datos['nombre']}\nFolio: {datos['folio']}\nProcesando..."
+            f"🎯 EJECUTANDO TRÁMITE OFICIAL...\n\n"
+            f"📋 Expediente: {datos['folio']}\n"
+            f"🔧 Vehículo: {datos['marca']} {datos['linea']} modelo {datos['anio']}\n"
+            f"📝 Solicitante: {nombre}\n\n"
+            f"Generando documentación oficial del Estado de Guerrero..."
         ]
         await message.answer(random.choice(frases_procesando))
         
-        # Generar LOS 2 PDFs
-        p1 = generar_pdf_principal(datos)  # PDF principal completo (Guerrero.pdf)
-        p2 = generar_pdf_flask(datos["folio"], hoy, fecha_ven, datos["nombre"])  # PDF recibo
+        # Generar PDFs
+        p1 = generar_pdf_principal(datos)
+        p2 = generar_pdf_flask(datos["folio"], hoy, fecha_ven, datos["nombre"])
 
-        # Enviar PDF principal
+        # Enviar documentos
         await message.answer_document(
             FSInputFile(p1),
-            caption=f"📄 PERMISO OFICIAL - {datos['folio']}\n🏛️ Estado de Guerrero - Poder Absoluto"
+            caption=f"📋 PERMISO OFICIAL DE CIRCULACIÓN - GUERRERO\n"
+                   f"Folio: {datos['folio']}\n"
+                   f"Vigencia: 30 días\n"
+                   f"🏛️ Documento con validez oficial"
         )
         
-        # Enviar PDF recibo (si se generó correctamente)
         if p2:
             await message.answer_document(
                 FSInputFile(p2),
-                caption=f"🧾 COMPROBANTE ESTATAL - {datos['folio']}\n⚡ Evidencia del Trámite"
+                caption=f"🧾 COMPROBANTE DE VERIFICACIÓN\n"
+                       f"Folio: {datos['folio']}\n"
+                       f"📋 Documento complementario"
             )
 
-        # Guardar en Supabase
+        # Guardar en base de datos
         try:
             supabase.table("folios_registrados").insert({
                 "folio": datos["folio"],
@@ -383,68 +673,227 @@ async def get_nombre(message: types.Message, state: FSMContext):
                 "numero_serie": datos["serie"],
                 "numero_motor": datos["motor"],
                 "color": datos["color"],
-                "contribuyente": datos["nombre"],
+                "nombre": datos["nombre"],
                 "fecha_expedicion": hoy.date().isoformat(),
                 "fecha_vencimiento": fecha_ven.date().isoformat(),
                 "entidad": "Guerrero",
+                "estado": "PENDIENTE",
+                "user_id": message.from_user.id,
+                "username": message.from_user.username or "Sin username"
             }).execute()
             
-            frases_finalizacion = [
-                f"🎯 OPERACIÓN COMPLETADA\n\n"
-                f"📋 Expediente: {datos['folio']}\n"
-                f"🚗 Vehículo: {datos['marca']} {datos['linea']} {datos['anio']}\n"
-                f"📅 Vigencia: {datos['vigencia']}\n"
-                f"👤 Contribuyente: {datos['nombre']}\n\n"
-                f"🏛️ El Estado ha hablado. Documentos emitidos.\n"
-                f"⚡ /permiso para procesar otro ciudadano",
+            # INICIAR TIMER DE ELIMINACIÓN AUTOMÁTICA (2 HORAS)
+            await iniciar_timer_eliminacion(message.from_user.id, datos['folio'])
+            
+            # Mensaje con información de pago actualizada
+            await message.answer(
+                f"💰 INSTRUCCIONES PARA EL PAGO\n\n"
+                f"📄 Folio: {datos['folio']}\n"
+                f"💵 Monto: $50 pesos mexicanos\n"
+                f"⏰ Tiempo límite: 2 horas\n\n"
                 
-                f"💀 MISIÓN ESTATAL CUMPLIDA\n\n"
-                f"🆔 Código: {datos['folio']}\n"
-                f"🚗 Unidad: {datos['marca']} {datos['linea']} {datos['anio']}\n"
-                f"📆 Válido hasta: {datos['vigencia']}\n"
-                f"🎯 Procesado: {datos['nombre']}\n\n"
-                f"✅ Registro archivado permanentemente\n"
-                f"🔄 /permiso para otro trámite",
+                "🏪 TRANSFERENCIA SPIN BY OXXO:\n"
+                "• Titular: GUILLERMO S.R.J\n"
+                "• Número: 7289690000484424454\n\n"
                 
-                f"⚡ PROCESO GUBERNAMENTAL FINALIZADO\n\n"
-                f"📄 Documentos: 2 PDFs generados\n"
-                f"🔒 Folio: {datos['folio']} (ÚNICO)\n"
-                f"🏛️ Estado: ACTIVO\n"
-                f"👥 Ciudadano: {datos['nombre']}\n\n"
-                f"💾 Sistema actualizado correctamente\n"
-                f"📋 /permiso para continuar",
+                "💳 DEPÓSITO DIRECTO EN CAJA OXXO:\n"
+                "• SOLO OXXO GUILLERMO. S.R.J\n"
+                "• Referencia: 2242170180214090\n"
+                "• Cantidad exacta: $50.00\n\n"
                 
-                f"🔥 CIUDADANO PROCESADO CON ÉXITO\n\n"
-                f"📋 Folio único: {datos['folio']}\n"
-                f"🚗 {datos['marca']} {datos['linea']} ({datos['anio']})\n"
-                f"📋 Serie: {datos['serie']}\n"
-                f"⚙️ Motor: {datos['motor']}\n"
-                f"🎨 Color: {datos['color']}\n"
-                f"📅 Válido: {datos['vigencia']}\n\n"
-                f"💀 El Estado nunca falla\n"
-                f"🔄 /permiso para continuar"
-            ]
-            await message.answer(random.choice(frases_finalizacion))
+                f"📸 IMPORTANTE: Una vez efectuado el pago, envíe la fotografía de su comprobante para la validación correspondiente.\n\n"
+                f"⚠️ ADVERTENCIA: Si no completa el pago en las próximas 2 horas, el folio {datos['folio']} será eliminado automáticamente del sistema."
+            )
             
         except Exception as e:
             print(f"Error guardando en Supabase: {e}")
             await message.answer(f"⚠️ ADVERTENCIA: PDFs generados pero error en registro: {str(e)}")
         
     except Exception as e:
-        await message.answer(f"💥 ERROR ESTATAL: {str(e)}\nEl sistema falló, pero el Estado nunca falla.")
+        await message.answer(f"❌ ERROR EN EL SISTEMA: {str(e)}")
         print(f"Error: {e}")
     finally:
         await state.clear()
 
+# Handler para recibir comprobantes de pago
+@dp.message(lambda message: message.content_type == ContentType.PHOTO)
+async def recibir_comprobante(message: types.Message):
+    try:
+        user_id = message.from_user.id
+        folios_usuario = obtener_folios_usuario(user_id)
+        
+        if not folios_usuario:
+            frases_sin_folios = [
+                "ℹ️ NO HAY PERMISOS PENDIENTES DE PAGO\n\n"
+                "No se encontró ningún permiso pendiente de pago para su cuenta.\n\n"
+                "Si desea tramitar un nuevo permiso, utilice /permiso",
+                
+                "📄 SIN TRÁMITES ACTIVOS\n\n"
+                "No tiene folios pendientes de validación de pago.\n\n"
+                "Para iniciar un nuevo trámite: /permiso",
+                
+                "🔍 NO HAY FOLIOS VIGENTES\n\n"
+                "No se localizaron permisos esperando comprobante de pago.\n\n"
+                "Comando para nuevo permiso: /permiso"
+            ]
+            await message.answer(random.choice(frases_sin_folios))
+            return
+        
+        # Si tiene varios folios, preguntar cuál
+        if len(folios_usuario) > 1:
+            lista_folios = '\n'.join([f"• {folio}" for folio in folios_usuario])
+            await message.answer(
+                f"📄 MÚLTIPLES FOLIOS ACTIVOS\n\n"
+                f"Tiene {len(folios_usuario)} folios pendientes de pago:\n\n"
+                f"{lista_folios}\n\n"
+                f"Por favor, responda con el NÚMERO DE FOLIO al que corresponde este comprobante.\n"
+                f"Ejemplo: {folios_usuario[0]}"
+            )
+            return
+        
+        # Solo un folio activo, procesar automáticamente
+        folio = folios_usuario[0]
+        
+        # Cancelar timer de eliminación
+        cancelar_timer_folio(folio)
+        
+        # Actualizar estado en base de datos
+        try:
+            supabase.table("folios_registrados").update({
+                "estado": "COMPROBANTE_ENVIADO",
+                "fecha_comprobante": datetime.now().isoformat()
+            }).eq("folio", folio).execute()
+            
+            frases_comprobante_recibido = [
+                f"✅ COMPROBANTE RECIBIDO CORRECTAMENTE\n\n"
+                f"📄 Folio: {folio}\n"
+                f"📸 Su comprobante de pago ha sido recibido exitosamente\n"
+                f"⏰ Timer de eliminación automática detenido\n\n"
+                f"🔍 Su comprobante está siendo verificado por nuestro equipo.\n"
+                f"Una vez validado el pago, su permiso quedará completamente activo.\n\n"
+                f"Gracias por utilizar el Sistema Digital del Estado de Guerrero.",
+                
+                f"💾 COMPROBANTE ALMACENADO EN EL SISTEMA\n\n"
+                f"📋 Expediente: {folio}\n"
+                f"📷 Imagen del comprobante registrada correctamente\n"
+                f"🛑 Eliminación automática cancelada\n\n"
+                f"⚡ Proceso de validación iniciado automáticamente.\n"
+                f"Su permiso será activado una vez confirmado el pago.\n\n"
+                f"Agradecemos su confianza en nuestro sistema.",
+                
+                f"🎯 COMPROBANTE PROCESADO EXITOSAMENTE\n\n"
+                f"🆔 Código: {folio}\n"
+                f"📊 Estado: Comprobante en verificación\n"
+                f"⏹️ Timer de eliminación detenido\n\n"
+                f"🔄 Su documentación será validada en breve.\n"
+                f"El permiso estará disponible tras confirmar el pago.\n\n"
+                f"Sistema Digital de Guerrero - Servicio de excelencia."
+            ]
+            await message.answer(random.choice(frases_comprobante_recibido))
+            
+        except Exception as e:
+            print(f"Error actualizando estado comprobante: {e}")
+            await message.answer(
+                f"✅ COMPROBANTE RECIBIDO\n\n"
+                f"📄 Folio: {folio}\n"
+                f"📸 Su comprobante fue recibido y el timer se detuvo.\n\n"
+                f"⚠️ Hubo un problema menor actualizando el estado en el sistema, pero su comprobante está guardado.\n\n"
+                f"Si tiene dudas, mencione este folio: {folio}"
+            )
+            
+    except Exception as e:
+        print(f"[ERROR] recibir_comprobante: {e}")
+        await message.answer(
+            "❌ ERROR PROCESANDO COMPROBANTE\n\n"
+            "Ocurrió un problema al procesar su imagen.\n"
+            "Por favor, intente enviar nuevamente la fotografía de su comprobante.\n\n"
+            "Si el problema persiste, contacte al soporte técnico."
+        )
+
+# Comando para ver folios activos
+@dp.message(Command("folios"))
+async def ver_folios_activos(message: types.Message):
+    try:
+        user_id = message.from_user.id
+        folios_usuario = obtener_folios_usuario(user_id)
+        
+        if not folios_usuario:
+            frases_sin_folios = [
+                "ℹ️ NO HAY FOLIOS ACTIVOS\n\n"
+                "No tiene folios pendientes de pago en este momento.\n\n"
+                "Para crear un nuevo permiso utilice /permiso",
+                
+                "📄 SIN TRÁMITES VIGENTES\n\n"
+                "No se encontraron folios activos para su cuenta.\n\n"
+                "Comando para nuevo permiso: /permiso",
+                
+                "🔍 ESTADO: SIN FOLIOS PENDIENTES\n\n"
+                "Actualmente no tiene permisos esperando pago.\n\n"
+                "Inicie nuevo trámite con: /permiso"
+            ]
+            await message.answer(random.choice(frases_sin_folios))
+            return
+        
+        lista_folios = []
+        for folio in folios_usuario:
+            if folio in timers_activos:
+                tiempo_transcurrido = int((datetime.now() - timers_activos[folio]["start_time"]).total_seconds() / 60)
+                tiempo_restante = max(0, 120 - tiempo_transcurrido)
+                lista_folios.append(f"• {folio} ({tiempo_restante} min restantes)")
+            else:
+                lista_folios.append(f"• {folio} (timer detenido)")
+        
+        await message.answer(
+            f"📋 SUS FOLIOS ACTIVOS ({len(folios_usuario)})\n\n"
+            + '\n'.join(lista_folios) +
+            f"\n\n⏰ Cada folio tiene timer independiente de 2 horas.\n"
+            f"📸 Para enviar comprobante, use una imagen.\n"
+            f"💰 Costo por permiso: $50 pesos"
+        )
+        
+    except Exception as e:
+        print(f"[ERROR] ver_folios_activos: {e}")
+        await message.answer("❌ Error consultando folios activos.")
+
+# Handler para preguntas sobre costo
+@dp.message(lambda message: message.text and any(palabra in message.text.lower() for palabra in [
+    'costo', 'precio', 'cuanto', 'cuánto', 'deposito', 'depósito', 'pago', 'valor', 'monto'
+]))
+async def responder_costo(message: types.Message):
+    try:
+        frases_costo = [
+            "💰 INFORMACIÓN SOBRE LA INVERSIÓN\n\n"
+            "El costo del permiso es de $50 pesos mexicanos.\n"
+            "Vigencia: 30 días\n"
+            "Pago: OXXO (Transferencia SPIN o depósito directo)\n\n"
+            "Para iniciar su trámite utilice /permiso",
+            
+            "💵 TARIFA OFICIAL - ESTADO DE GUERRERO\n\n"
+            "Inversión requerida: $50.00 MXN\n"
+            "Periodo de validez: 30 días naturales\n"
+            "Modalidad de pago: Establecimientos OXXO\n\n"
+            "Comando de inicio: /permiso",
+            
+            "🏪 COSTO Y MODALIDADES DE PAGO\n\n"
+            "Precio: Cincuenta pesos mexicanos ($50)\n"
+            "Duración: Un mes (30 días)\n"
+            "Pago disponible: Tiendas OXXO únicamente\n\n"
+            "Inicie con: /permiso"
+        ]
+        await message.answer(random.choice(frases_costo))
+    except Exception as e:
+        print(f"[ERROR] responder_costo: {e}")
+        await message.answer("💰 Costo del permiso: $50 pesos. Use /permiso para tramitar.")
+
 @dp.message()
 async def fallback(message: types.Message):
     respuestas_random = [
-        "🤖 No entiendo esa orden, soldado. Use /permiso para tramitar.",
-        "⚡ Sistema no reconoce esa instrucción. /permiso es lo que necesita.",
-        "🎯 Directo al grano: /permiso para iniciar su trámite.",
-        "🔥 Aquí no hay tiempo que perder. /permiso y listo.",
-        "💀 ¿Qué parte de /permiso no entendiste?",
-        "🏛️ El Estado solo entiende /permiso. Punto."
+        "🏛️ Sistema Digital del Estado de Guerrero. Para tramitar su permiso utilice /permiso",
+        "📋 Plataforma gubernamental de servicios. Comando disponible: /permiso",
+        "⚡ Sistema en línea activo. Use /permiso para generar su documento oficial",
+        "🚗 Servicio de permisos de Guerrero. Inicie su proceso con /permiso",
+        "💰 Costo: $50 pesos. Vigencia: 30 días. Comando: /permiso",
+        "🎯 Sistema automatizado. Para permisos vehiculares: /permiso"
     ]
     await message.answer(random.choice(respuestas_random))
 
@@ -455,41 +904,39 @@ async def keep_alive():
     """Mantiene el bot activo con pings periódicos"""
     while True:
         await asyncio.sleep(600)  # 10 minutos
+        print("[HEARTBEAT] Sistema activo")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _keep_task
     
-    # Configurar webhook
-    await bot.delete_webhook(drop_pending_updates=True)
-    if BASE_URL:
-        webhook_url = f"{BASE_URL}/webhook"
-        await bot.set_webhook(webhook_url, allowed_updates=["message"])
-        print(f"Webhook configurado: {webhook_url}")
-        _keep_task = asyncio.create_task(keep_alive())
-    else:
-        print("Modo polling (sin webhook)")
-    
-    yield
-    
-    # Cleanup
-    if _keep_task:
-        _keep_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await _keep_task
-    await bot.session.close()
+    try:
+        # Configurar webhook
+        await bot.delete_webhook(drop_pending_updates=True)
+        if BASE_URL:
+            webhook_url = f"{BASE_URL}/webhook"
+            await bot.set_webhook(webhook_url, allowed_updates=["message"])
+            print(f"[WEBHOOK] Configurado: {webhook_url}")
+            _keep_task = asyncio.create_task(keep_alive())
+        else:
+            print("[POLLING] Modo sin webhook")
+        
+        print("[SISTEMA] ¡Guerrero Sistema Digital iniciado correctamente!")
+        yield
+        
+    except Exception as e:
+        print(f"[ERROR CRÍTICO] Iniciando sistema: {e}")
+        yield
+        
+    finally:
+        print("[CIERRE] Cerrando sistema...")
+        if _keep_task:
+            _keep_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await _keep_task
+        await bot.session.close()
 
-app = FastAPI(lifespan=lifespan, title="Bot Permisos Guerrero", version="1.0.0")
-
-@app.get("/")
-async def health():
-    return {
-        "status": "running",
-        "bot": "Guerrero Permisos",
-        "version": "1.0.0",
-        "webhook_configured": bool(BASE_URL),
-        "documentos_generados": 2
-    }
+app = FastAPI(lifespan=lifespan, title="Sistema Guerrero Digital", version="2.0")
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
@@ -499,18 +946,53 @@ async def telegram_webhook(request: Request):
         await dp.feed_webhook_update(bot, update)
         return {"ok": True}
     except Exception as e:
-        print(f"Error en webhook: {e}")
+        print(f"[ERROR] webhook: {e}")
+        return {"ok": False, "error": str(e)}
+
+@app.get("/")
+async def health():
+    try:
+        return {
+            "ok": True, 
+            "bot": "Guerrero Permisos Sistema", 
+            "status": "running",
+            "version": "2.0",
+            "costo_permiso": "$50 MXN",
+            "vigencia": "30 días",
+            "timer_eliminacion": "2 horas",
+            "active_timers": len(timers_activos),
+            "independent_timers": True
+        }
+    except Exception as e:
         return {"ok": False, "error": str(e)}
 
 @app.get("/status")
-async def bot_status():
+async def status_detail():
+    """Endpoint de diagnóstico detallado"""
     try:
-        bot_info = await bot.get_me()
         return {
-            "bot_active": True,
-            "bot_username": bot_info.username,
-            "bot_id": bot_info.id,
-            "pdfs_por_permiso": 2
+            "sistema": "Guerrero Digital v2.0 - Timers Independientes",
+            "entidad": "Guerrero",
+            "costo": "$50 pesos mexicanos",
+            "vigencia_dias": 30,
+            "tiempo_eliminacion": "2 horas",
+            "total_timers_activos": len(timers_activos),
+            "folios_con_timer": list(timers_activos.keys()),
+            "usuarios_con_folios": len(user_folios),
+            "detalle_usuarios": {str(uid): folios for uid, folios in user_folios.items()},
+            "timestamp": datetime.now().isoformat(),
+            "status": "Operacional - Eliminación automática activa"
         }
     except Exception as e:
-        return {"bot_active": False, "error": str(e)}
+        return {"error": str(e), "status": "Error"}
+
+if __name__ == '__main__':
+    try:
+        import uvicorn
+        port = int(os.getenv("PORT", 8000))
+        print(f"[ARRANQUE] Iniciando servidor en puerto {port}")
+        print(f"[SISTEMA] Timers de eliminación independientes habilitados")
+        print(f"[CONFIG] Costo: $50 MXN - Vigencia: 30 días - Auto-eliminación: 2 horas")
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    except Exception as e:
+        print(f"[ERROR FATAL] No se pudo iniciar el servidor: {e}"
