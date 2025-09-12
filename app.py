@@ -10,11 +10,23 @@ from datetime import datetime, timedelta
 from supabase import create_client, Client
 import asyncio
 import os
-import fitz
-import random
+import fitz  # PyMuPDF
+import pytz
+import pdf417gen
 from PIL import Image
-import qrcode
+import random
+
+# Importaciones adicionales
 from io import BytesIO
+import base64
+from pdf417gen import encode, render_image
+import qrcode
+import string
+import csv
+import json
+import io
+import time
+import re  # para filtrar folios no numéricos
 
 # ------------ CONFIG ------------
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
