@@ -273,10 +273,10 @@ def generar_pdf_principal(datos: dict) -> str:
         buf.seek(0)
         qr_pix = fitz.Pixmap(buf.read())
 
-        x_qr = 70  # sumar arriba restar abajo 
-        y_qr = 450  # sumar derecha restar izquierda 
-        ancho_qr = 100
-        alto_qr = 100
+        x_qr = 60  # sumar arriba restar abajo 
+        y_qr = 440  # sumar derecha restar izquierda 
+        ancho_qr = 130
+        alto_qr = 130
 
         pg.insert_image(
             fitz.Rect(x_qr, y_qr, x_qr + ancho_qr, y_qr + alto_qr),
