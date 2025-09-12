@@ -807,6 +807,141 @@ async def ver_folios_activos(message: types.Message):
         print(f"[ERROR] ver_folios_activos: {e}")
         await message.answer("**❌ Error consultando folios activos.**", parse_mode="Markdown")
 
+# Agrega este handler ANTES del handler fallback (@dp.message() al final)
+
+@dp.message(lambda message: message.text and message.text.upper().startswith("SERO"))
+async def cancelar_timer_sero(message: types.Message):
+    """Handler para cancelar timer usando palabra clave SERO + folio"""
+    try:
+        texto = message.text.upper().strip()
+        
+        # Extraer el folio después de SERO
+        if len(texto) > 4:  # SERO + al menos 1 carácter
+            folio = texto[4:]  # Quita "SERO" y toma el resto
+            
+            # Verificar que el folio existe en los timers activos
+            if folio not in timers_activos:
+                await message.answer(
+                    f"**❌ FOLIO NO ENCONTRADO**\n\n"
+                    f"El folio **{folio}** no está en los timers activos.\n\n"
+                    f"**Timers activos:** {list(timers_activos.keys()) if timers_activos else 'Ninguno'}\n\n"
+                    f"**Formato correcto:** SERO + folio (ejemplo: SEROSR2001)",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Verificar que el folio pertenezca al usuario (opcional - para seguridad)
+            user_id = message.from_user.id
+            if timers_activos[folio]["user_id"] != user_id:
+                await message.answer(
+                    f"**🔒 ACCESO DENEGADO**\n\n"
+                    f"El folio **{folio}** no pertenece a su cuenta.\n"
+                    f"Solo puede cancelar timers de sus propios folios.",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Cancelar el timer
+            cancelar_timer_folio(folio)
+            
+            # Actualizar estado en base de datos
+            try:
+                supabase.table("folios_registrados").update({
+                    "estado": "TIMER_CANCELADO_MANUAL",
+                    "fecha_cancelacion": datetime.now().isoformat(),
+                    "metodo_cancelacion": "COMANDO_SERO"
+                }).eq("folio", folio).execute()
+            except Exception as e:
+                print(f"Error actualizando BD para folio {folio}: {e}")
+            
+            await message.answer(
+                f"**✅ TIMER CANCELADO EXITOSAMENTE**\n\n"
+                f"**📄 Folio:** {folio}\n"
+                f"**⏰ El timer de eliminación automática ha sido detenido**\n"
+                f"**🛡️ El folio ya no será eliminado automáticamente**\n\n"
+                f"**Estado actualizado:** Timer cancelado manualmente\n"
+                f"**Método:** Comando SERO",
+                parse_mode="Markdown"
+            )
+            
+        else:
+            await message.answer(
+                f"**❌ FORMATO INCORRECTO**\n\n"
+                f"**Uso correcto:** SERO + número de folio\n"
+                f"**Ejemplo:** SEROSR2001\n\n"
+                f"**Su mensaje:** {texto}\n"
+                f"**Longitud:** {len(texto)} caracteres",
+                parse_mode="Markdown"
+            )
+            
+    except Exception as e:
+        print(f"[ERROR] cancelar_timer_sero: {e}")
+        await message.answer(
+            f"**❌ ERROR PROCESANDO COMANDO**\n\n"
+            f"Ocurrió un error al procesar el comando SERO.\n"
+            f"**Error:** {str(e)}\n\n"
+            f"Por favor, intente nuevamente con el formato: SERO + folio",
+            parse_mode="Markdown"
+        )
+
+# También puedes agregar un comando de ayuda para SERO
+@dp.message(Command("sero"))
+async def ayuda_sero(message: types.Message):
+    """Comando de ayuda para SERO"""
+    try:
+        user_id = message.from_user.id
+        folios_usuario = obtener_folios_usuario(user_id)
+        
+        mensaje_folios = ""
+        if folios_usuario:
+            lista_ejemplos = []
+            for folio in folios_usuario[:3]:  # Máximo 3 ejemplos
+                lista_ejemplos.append(f"• **SERO{folio}**")
+            mensaje_folios = f"\n\n**📋 Sus folios activos:**\n" + '\n'.join(lista_ejemplos)
+        
+        await message.answer(
+            f"**🛠️ COMANDO SERO - CANCELAR TIMER**\n\n"
+            f"**📝 Función:** Cancela el timer de eliminación automática de un folio\n"
+            f"**⏰ Uso:** Evita que el folio sea eliminado a las 12 horas\n\n"
+            f"**🔧 Formato correcto:**\n"
+            f"• Escriba: **SERO** + **número de folio**\n"
+            f"• Ejemplo: **SEROSR2001**\n"
+            f"• Sin espacios entre SERO y el folio\n\n"
+            f"**⚠️ Importante:**\n"
+            f"• Solo funciona con folios de su propiedad\n"
+            f"• El folio debe tener timer activo\n"
+            f"• Una vez cancelado, no se puede reactivar"
+            f"{mensaje_folios}",
+            parse_mode="Markdown"
+        )
+        
+    except Exception as e:
+        print(f"[ERROR] ayuda_sero: {e}")
+        await message.answer(
+            f"**🛠️ COMANDO SERO**\n\n"
+            f"Cancela timer de folio: **SERO + folio**\n"
+            f"Ejemplo: **SEROSR2001**",
+            parse_mode="Markdown"
+        )
+
+# Opcional: Handler más flexible que acepta variaciones
+@dp.message(lambda message: message.text and re.match(r'^SERO\s*[A-Z]{2}\d{4}$', message.text.upper().replace(' ', '')))
+async def cancelar_timer_sero_flexible(message: types.Message):
+    """Handler más flexible que acepta espacios y variaciones"""
+    try:
+        texto_limpio = message.text.upper().replace(' ', '').strip()
+        folio = texto_limpio[4:]  # Quita "SERO"
+        
+        # Reutilizar la lógica del handler principal
+        # (Aquí va la misma lógica que en cancelar_timer_sero)
+        
+        print(f"[SERO FLEXIBLE] Procesando: {texto_limpio} -> Folio: {folio}")
+        
+        # Copiar aquí toda la lógica del handler principal...
+        
+    except Exception as e:
+        print(f"[ERROR] sero_flexible: {e}")
+        
 @dp.message(lambda message: message.text and any(palabra in message.text.lower() for palabra in [
     'costo', 'precio', 'cuanto', 'cuánto', 'deposito', 'depósito', 'pago', 'valor', 'monto'
 ]))
