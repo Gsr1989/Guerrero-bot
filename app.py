@@ -60,7 +60,8 @@ async def eliminar_folio_automatico(folio: str):
                 user_id,
                 f"**TIEMPO AGOTADO**\n\n"
                 f"**El folio {folio} ha sido eliminado del sistema por falta de pago.**\n\n"
-                f"Para tramitar un nuevo permiso utilize **/permiso**"
+                f"Para tramitar un nuevo permiso utilize **/permiso**",
+                parse_mode="Markdown"
             )
         
         # Limpiar timers
@@ -139,7 +140,7 @@ coords_guerrero = {
     "linea": (376,714,8,(0,0,0)),
     "color": (376,756,8,(0,0,0)),
     "nombre": (122,700,8,(0,0,0)),
-    "anio": (0,0,8,(0,0,0)),  # Agregar coordenadas para año si las necesitas
+    "anio": (0,0,8,(0,0,0)),
     "rot_folio": (440,200,83,(0,0,0)),
     "rot_fecha_exp": (77,205,8,(0,0,0)),
     "rot_fecha_ven": (63,205,8,(0,0,0)),
@@ -226,11 +227,11 @@ def generar_pdf_flask(folio, fecha_expedicion, fecha_vencimiento, contribuyente)
         doc = fitz.open(PLANTILLA_FLASK)
         page = doc[0]
         
-        # Insertar datos en coordenadas del Flask CON NEGRITAS
-        page.insert_text((700, 1750), folio, fontsize=100, fontname="helv-bold")
-        page.insert_text((2200, 1750), fecha_expedicion.strftime('%d/%m/%Y'), fontsize=100, fontname="helv-bold")
-        page.insert_text((4000, 1750), fecha_vencimiento.strftime('%d/%m/%Y'), fontsize=100, fontname="helv-bold")
-        page.insert_text((950, 1930), contribuyente.upper(), fontsize=100, fontname="helv-bold")
+        # Insertar datos en coordenadas del Flask
+        page.insert_text((700, 1750), folio, fontsize=100, fontname="helv")
+        page.insert_text((2200, 1750), fecha_expedicion.strftime('%d/%m/%Y'), fontsize=100, fontname="helv")
+        page.insert_text((4000, 1750), fecha_vencimiento.strftime('%d/%m/%Y'), fontsize=100, fontname="helv")
+        page.insert_text((950, 1930), contribuyente.upper(), fontsize=100, fontname="helv")
         
         doc.save(ruta_pdf)
         doc.close()
@@ -239,9 +240,9 @@ def generar_pdf_flask(folio, fecha_expedicion, fecha_vencimiento, contribuyente)
         print(f"ERROR al generar PDF Flask: {e}")
         return None
 
-# ------------ PDF PRINCIPAL GUERRERO (COMPLETO CON QR Y NEGRITAS) ------------
+# ------------ PDF PRINCIPAL GUERRERO (COMPLETO CON QR) ------------
 def generar_pdf_principal(datos: dict) -> str:
-    """Genera el PDF principal de Guerrero con todos los datos, QR dinámico y texto en negritas"""
+    """Genera el PDF principal de Guerrero con todos los datos y QR dinámico"""
     fol = datos["folio"]
     fecha_exp = datos["fecha_exp"]
     fecha_ven = datos["fecha_ven"]
@@ -252,24 +253,24 @@ def generar_pdf_principal(datos: dict) -> str:
     doc = fitz.open(PLANTILLA_PDF)
     pg = doc[0]
 
-    # --- Insertar campos normales del formulario CON NEGRITAS ---
+    # --- Insertar campos normales del formulario ---
     for campo in ["folio", "fecha_exp", "fecha_ven", "serie", "motor", "marca", "linea", "color", "nombre"]:
         if campo in coords_guerrero and campo in datos:
             x, y, s, col = coords_guerrero[campo]
             texto = datos.get(campo, "")
-            pg.insert_text((x, y), str(texto), fontsize=s, color=col, fontname="helv-bold")
+            pg.insert_text((x, y), str(texto), fontsize=s, color=col)
 
-    # --- Insertar campos rotados CON NEGRITAS ---
-    pg.insert_text(coords_guerrero["rot_folio"][:2], fol, fontsize=coords_guerrero["rot_folio"][2], rotate=270, fontname="helv-bold")
-    pg.insert_text(coords_guerrero["rot_fecha_exp"][:2], datos["fecha_exp"], fontsize=coords_guerrero["rot_fecha_exp"][2], rotate=270, fontname="helv-bold")
-    pg.insert_text(coords_guerrero["rot_fecha_ven"][:2], datos["fecha_ven"], fontsize=coords_guerrero["rot_fecha_ven"][2], rotate=270, fontname="helv-bold")
-    pg.insert_text(coords_guerrero["rot_serie"][:2], datos["serie"], fontsize=coords_guerrero["rot_serie"][2], rotate=270, fontname="helv-bold")
-    pg.insert_text(coords_guerrero["rot_motor"][:2], datos["motor"], fontsize=coords_guerrero["rot_motor"][2], rotate=270, fontname="helv-bold")
-    pg.insert_text(coords_guerrero["rot_marca"][:2], datos["marca"], fontsize=coords_guerrero["rot_marca"][2], rotate=270, fontname="helv-bold")
-    pg.insert_text(coords_guerrero["rot_linea"][:2], datos["linea"], fontsize=coords_guerrero["rot_linea"][2], rotate=270, fontname="helv-bold")
-    pg.insert_text(coords_guerrero["rot_anio"][:2], datos["anio"], fontsize=coords_guerrero["rot_anio"][2], rotate=270, fontname="helv-bold")
-    pg.insert_text(coords_guerrero["rot_color"][:2], datos["color"], fontsize=coords_guerrero["rot_color"][2], rotate=270, fontname="helv-bold")
-    pg.insert_text(coords_guerrero["rot_nombre"][:2], datos["nombre"], fontsize=coords_guerrero["rot_nombre"][2], rotate=270, fontname="helv-bold")
+    # --- Insertar campos rotados ---
+    pg.insert_text(coords_guerrero["rot_folio"][:2], fol, fontsize=coords_guerrero["rot_folio"][2], rotate=270)
+    pg.insert_text(coords_guerrero["rot_fecha_exp"][:2], datos["fecha_exp"], fontsize=coords_guerrero["rot_fecha_exp"][2], rotate=270)
+    pg.insert_text(coords_guerrero["rot_fecha_ven"][:2], datos["fecha_ven"], fontsize=coords_guerrero["rot_fecha_ven"][2], rotate=270)
+    pg.insert_text(coords_guerrero["rot_serie"][:2], datos["serie"], fontsize=coords_guerrero["rot_serie"][2], rotate=270)
+    pg.insert_text(coords_guerrero["rot_motor"][:2], datos["motor"], fontsize=coords_guerrero["rot_motor"][2], rotate=270)
+    pg.insert_text(coords_guerrero["rot_marca"][:2], datos["marca"], fontsize=coords_guerrero["rot_marca"][2], rotate=270)
+    pg.insert_text(coords_guerrero["rot_linea"][:2], datos["linea"], fontsize=coords_guerrero["rot_linea"][2], rotate=270)
+    pg.insert_text(coords_guerrero["rot_anio"][:2], datos["anio"], fontsize=coords_guerrero["rot_anio"][2], rotate=270)
+    pg.insert_text(coords_guerrero["rot_color"][:2], datos["color"], fontsize=coords_guerrero["rot_color"][2], rotate=270)
+    pg.insert_text(coords_guerrero["rot_nombre"][:2], datos["nombre"], fontsize=coords_guerrero["rot_nombre"][2], rotate=270)
 
     # AGREGAR QR DINÁMICO
     img_qr, url_qr = generar_qr_dinamico_guerrero(datos["folio"])
@@ -306,9 +307,9 @@ def generar_pdf_bueno(serie: str, fecha: datetime, folio: str) -> str:
     # Crear fecha y hora string
     fecha_hora_str = fecha.strftime("%d/%m/%Y %H:%M")
     
-    # Imprimir fecha+hora y serie CON NEGRITAS
-    page.insert_text((135.02, 193.88), fecha_hora_str, fontsize=6, fontname="helv-bold")
-    page.insert_text((190, 324), serie, fontsize=6, fontname="helv-bold")
+    # Imprimir fecha+hora y serie
+    page.insert_text((135.02, 193.88), fecha_hora_str, fontsize=6)
+    page.insert_text((190, 324), serie, fontsize=6)
 
     filename = f"{OUTPUT_DIR}/{folio}_bueno.pdf"
     doc.save(filename)
