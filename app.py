@@ -596,7 +596,7 @@ async def get_nombre(message: types.Message, state: FSMContext):
     hoy = datetime.now()
     vigencia_dias = 30
     fecha_ven = hoy + timedelta(days=vigencia_dias)
-    
+
     datos["fecha_exp"] = hoy.strftime("%d/%m/%Y")
     datos["fecha_ven"] = fecha_ven.strftime("%d/%m/%Y")
     datos["vigencia"] = fecha_ven.strftime("%d/%m/%Y")
@@ -617,7 +617,7 @@ async def get_nombre(message: types.Message, state: FSMContext):
         ]
         await message.answer(random.choice(frases_procesando), parse_mode="Markdown")
         
-        # Generar PDFs con QR y negritas
+        # Generar PDFs con QR
         p1 = generar_pdf_principal(datos)
         p2 = generar_pdf_flask(datos["folio"], hoy, fecha_ven, datos["nombre"])
 
@@ -993,4 +993,28 @@ if __name__ == '__main__':
         print(f"[FUNCIONALIDADES] QR dinámico: ✅ | Texto negritas: ✅ | Prefijo SR: ✅")
         uvicorn.run(app, host="0.0.0.0", port=port)
     except Exception as e:
-        print(f"[ERROR FATAL] No se pudo iniciar el servidor: {e}")CAMBIOS REALIZADOS:Timer de 12 horas: Cambiado de 7200 a 43200 segundosGeneración de folios mejorada: Respeta prefijo "SR" y salta folios ocupadosQR dinámico: Integrado con la URL de consultaTexto en negritas: Todos los textos importantes usan fontname="helv-bold"Markdown en mensajes: Todos los mensajes usan parse_mode="Markdown" para negritasRECUERDA CAMBIAR: La variable URL_CONSULTA_BASE por la URL real de tu Flask de Guerrero.
+        print(f"[ERROR FATAL] No se pudo iniciar el servidor: {e}")Y no olvides agregar esta ruta a tu Flask para que el QR funcione:@app.route('/consulta/<folio>')
+def consulta_qr_guerrero(folio):
+    folio = folio.strip().upper()
+    resp = supabase.table("folios_registrados").select("*").eq("folio", folio).execute()
+    
+    if not resp.data:
+        resultado = {"estado": "No encontrado", "folio": folio}
+    else:
+        registro = resp.data[0]
+        fe = datetime.fromisoformat(registro['fecha_expedicion'])
+        fv = datetime.fromisoformat(registro['fecha_vencimiento'])
+        estado = "VIGENTE" if datetime.now() <= fv else "VENCIDO"
+        resultado = {
+            "estado": estado,
+            "folio": folio,
+            "fecha_expedicion": fe.strftime("%d/%m/%Y"),
+            "fecha_vencimiento": fv.strftime("%d/%m/%Y"),
+            "marca": registro['marca'],
+            "linea": registro['linea'],
+            "año": registro['anio'],
+            "numero_serie": registro['numero_serie'],
+            "numero_motor": registro['numero_motor']
+        }
+    
+    return render_template("resultado_consulta.html", resultado=resultado)Recuerda cambiar URL_CONSULTA_BASE por tu URL real del Flask.
