@@ -156,8 +156,8 @@ coords_guerrero = {
 # ------------ FUNCIÓN GENERAR FOLIO GUERRERO (MEJORADA - SALTA FOLIOS OCUPADOS) ------------
 def generar_folio_guerrero():
     letras = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    prefijo = "SZ"
-    inicio_num = 4765
+    prefijo = "ZA"
+    inicio_num = 1245
 
     try:
         existentes = supabase.table("folios_registrados").select("folio").eq("entidad", "Guerrero").execute().data
