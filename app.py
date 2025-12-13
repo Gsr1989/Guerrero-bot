@@ -243,37 +243,36 @@ def generar_qr_dinamico_guerrero(folio):
         print(f"[ERROR QR GUERRERO] {e}")
         return None, None
 
-# ============ GENERACIÓN PDF UNIFICADO (2 PÁGINAS EN 1 ARCHIVO) ============
-def generar_pdf_unificado(datos: dict) -> str:
-    """Genera UN SOLO PDF con 2 plantillas (2 páginas) - SIN ELBUENO.PDF"""
+# ============ GENERACIÓN DE 2 PDFs SEPARADOS ============
+def generar_pdf_principal(datos: dict) -> str:
+    """Genera el PDF principal de Guerrero (Guerrero.pdf)"""
     fol = datos["folio"]
     
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    filename = f"{OUTPUT_DIR}/{fol}_completo.pdf"
+    filename = f"{OUTPUT_DIR}/{fol}_guerrero.pdf"
     
     try:
-        # ===== PÁGINA 1: PLANTILLA PRINCIPAL (Guerrero.pdf) =====
-        doc1 = fitz.open(PLANTILLA_PDF)
-        pg1 = doc1[0]
+        doc = fitz.open(PLANTILLA_PDF)
+        pg = doc[0]
 
         for campo in ["folio", "fecha_exp", "fecha_ven", "serie", "motor", "marca", "linea", "color", "nombre"]:
             if campo in coords_guerrero and campo in datos:
                 x, y, s, col = coords_guerrero[campo]
                 texto = datos.get(campo, "")
-                pg1.insert_text((x, y), str(texto), fontsize=s, color=col)
+                pg.insert_text((x, y), str(texto), fontsize=s, color=col)
 
-        pg1.insert_text(coords_guerrero["rot_folio"][:2], fol, fontsize=coords_guerrero["rot_folio"][2], rotate=270)
-        pg1.insert_text(coords_guerrero["rot_fecha_exp"][:2], datos["fecha_exp"], fontsize=coords_guerrero["rot_fecha_exp"][2], rotate=270)
-        pg1.insert_text(coords_guerrero["rot_fecha_ven"][:2], datos["fecha_ven"], fontsize=coords_guerrero["rot_fecha_ven"][2], rotate=270)
-        pg1.insert_text(coords_guerrero["rot_serie"][:2], datos["serie"], fontsize=coords_guerrero["rot_serie"][2], rotate=270)
-        pg1.insert_text(coords_guerrero["rot_motor"][:2], datos["motor"], fontsize=coords_guerrero["rot_motor"][2], rotate=270)
-        pg1.insert_text(coords_guerrero["rot_marca"][:2], datos["marca"], fontsize=coords_guerrero["rot_marca"][2], rotate=270)
-        pg1.insert_text(coords_guerrero["rot_linea"][:2], datos["linea"], fontsize=coords_guerrero["rot_linea"][2], rotate=270)
-        pg1.insert_text(coords_guerrero["rot_anio"][:2], datos["anio"], fontsize=coords_guerrero["rot_anio"][2], rotate=270)
-        pg1.insert_text(coords_guerrero["rot_color"][:2], datos["color"], fontsize=coords_guerrero["rot_color"][2], rotate=270)
-        pg1.insert_text(coords_guerrero["rot_nombre"][:2], datos["nombre"], fontsize=coords_guerrero["rot_nombre"][2], rotate=270)
+        pg.insert_text(coords_guerrero["rot_folio"][:2], fol, fontsize=coords_guerrero["rot_folio"][2], rotate=270)
+        pg.insert_text(coords_guerrero["rot_fecha_exp"][:2], datos["fecha_exp"], fontsize=coords_guerrero["rot_fecha_exp"][2], rotate=270)
+        pg.insert_text(coords_guerrero["rot_fecha_ven"][:2], datos["fecha_ven"], fontsize=coords_guerrero["rot_fecha_ven"][2], rotate=270)
+        pg.insert_text(coords_guerrero["rot_serie"][:2], datos["serie"], fontsize=coords_guerrero["rot_serie"][2], rotate=270)
+        pg.insert_text(coords_guerrero["rot_motor"][:2], datos["motor"], fontsize=coords_guerrero["rot_motor"][2], rotate=270)
+        pg.insert_text(coords_guerrero["rot_marca"][:2], datos["marca"], fontsize=coords_guerrero["rot_marca"][2], rotate=270)
+        pg.insert_text(coords_guerrero["rot_linea"][:2], datos["linea"], fontsize=coords_guerrero["rot_linea"][2], rotate=270)
+        pg.insert_text(coords_guerrero["rot_anio"][:2], datos["anio"], fontsize=coords_guerrero["rot_anio"][2], rotate=270)
+        pg.insert_text(coords_guerrero["rot_color"][:2], datos["color"], fontsize=coords_guerrero["rot_color"][2], rotate=270)
+        pg.insert_text(coords_guerrero["rot_nombre"][:2], datos["nombre"], fontsize=coords_guerrero["rot_nombre"][2], rotate=270)
 
-        # QR dinámico en página 1
+        # QR dinámico
         img_qr, url_qr = generar_qr_dinamico_guerrero(fol)
         
         if img_qr:
@@ -287,43 +286,51 @@ def generar_pdf_unificado(datos: dict) -> str:
             ancho_qr = 130
             alto_qr = 130
 
-            pg1.insert_image(
+            pg.insert_image(
                 fitz.Rect(x_qr, y_qr, x_qr + ancho_qr, y_qr + alto_qr),
                 pixmap=qr_pix,
                 overlay=True
             )
-            print(f"[QR GUERRERO] Insertado en página 1")
+            print(f"[QR GUERRERO] Insertado en PDF principal")
 
-        # ===== PÁGINA 2: PLANTILLA FLASK (recibo_permiso_guerrero_img.pdf) =====
-        doc2 = fitz.open(PLANTILLA_FLASK)
-        page2 = doc2[0]
+        doc.save(filename)
+        doc.close()
+        
+        print(f"[PDF PRINCIPAL GUERRERO] ✅ Generado: {filename}")
+        return filename
+        
+    except Exception as e:
+        print(f"[ERROR] Generando PDF principal GUERRERO: {e}")
+        return ""
+
+def generar_pdf_recibo(datos: dict) -> str:
+    """Genera el PDF tipo recibo (recibo_permiso_guerrero_img.pdf)"""
+    fol = datos["folio"]
+    
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    filename = f"{OUTPUT_DIR}/{fol}_recibo.pdf"
+    
+    try:
+        doc = fitz.open(PLANTILLA_FLASK)
+        page = doc[0]
         
         fecha_exp_dt = datos["fecha_exp_obj"]
         fecha_ven_dt = datos["fecha_ven_obj"]
         
-        page2.insert_text((700, 1750), fol, fontsize=100, fontname="helv")
-        page2.insert_text((2200, 1750), fecha_exp_dt.strftime('%d/%m/%Y'), fontsize=100, fontname="helv")
-        page2.insert_text((4000, 1750), fecha_ven_dt.strftime('%d/%m/%Y'), fontsize=100, fontname="helv")
-        page2.insert_text((950, 1930), datos["nombre"].upper(), fontsize=100, fontname="helv")
+        page.insert_text((700, 1750), fol, fontsize=100, fontname="helv")
+        page.insert_text((2200, 1750), fecha_exp_dt.strftime('%d/%m/%Y'), fontsize=100, fontname="helv")
+        page.insert_text((4000, 1750), fecha_ven_dt.strftime('%d/%m/%Y'), fontsize=100, fontname="helv")
+        page.insert_text((950, 1930), datos["nombre"].upper(), fontsize=100, fontname="helv")
         
-        # ===== UNIR LAS 2 PÁGINAS =====
-        doc1.insert_pdf(doc2)
-        doc2.close()
+        doc.save(filename)
+        doc.close()
         
-        doc1.save(filename)
-        doc1.close()
-        
-        print(f"[PDF UNIFICADO GUERRERO] ✅ Generado: {filename} (2 páginas)")
+        print(f"[PDF RECIBO GUERRERO] ✅ Generado: {filename}")
         return filename
         
     except Exception as e:
-        print(f"[ERROR] Generando PDF unificado GUERRERO: {e}")
-        doc_fallback = fitz.open()
-        page = doc_fallback.new_page()
-        page.insert_text((50, 50), f"ERROR - Folio: {fol}", fontsize=12)
-        doc_fallback.save(filename)
-        doc_fallback.close()
-        return filename
+        print(f"[ERROR] Generando PDF recibo GUERRERO: {e}")
+        return ""
 
 # ------------ HANDLERS ------------
 @dp.message(Command("start"))
@@ -450,13 +457,21 @@ async def get_nombre(message: types.Message, state: FSMContext):
             parse_mode="HTML"
         )
 
-        # Generar PDF UNIFICADO (2 páginas en 1 archivo)
-        pdf_unificado = generar_pdf_unificado(datos_pdf)
+        # Generar 2 PDFs SEPARADOS
+        pdf_principal = generar_pdf_principal(datos_pdf)
+        pdf_recibo = generar_pdf_recibo(datos_pdf)
 
-        await message.answer_document(
-            FSInputFile(pdf_unificado),
-            caption=f"📋 PERMISO DE CIRCULACIÓN - GUERRERO (COMPLETO)\nFolio: {folio}\nVigencia: 30 días\n\n✅ Documento con 2 páginas unificadas"
-        )
+        if pdf_principal:
+            await message.answer_document(
+                FSInputFile(pdf_principal),
+                caption=f"📋 PERMISO DE CIRCULACIÓN - GUERRERO\nFolio: {folio}\nVigencia: 30 días\n\n✅ Documento principal con QR"
+            )
+
+        if pdf_recibo:
+            await message.answer_document(
+                FSInputFile(pdf_recibo),
+                caption=f"🧾 COMPROBANTE DE VERIFICACIÓN\nFolio: {folio}\n\n📋 Recibo oficial"
+            )
 
         supabase.table("folios_registrados").insert({
             "folio": folio,
@@ -736,7 +751,7 @@ async def health():
         "ok": True,
         "bot": "Guerrero Permisos Sistema",
         "status": "running",
-        "version": "4.0 - PDF Unificado + Timer 36h + SERO + /chuleta",
+        "version": "4.0 - 2 PDFs Separados + Timer 36h + SERO + /chuleta",
         "entidad": "Guerrero",
         "vigencia": "30 días",
         "timer_eliminacion": "36 horas",
@@ -744,7 +759,7 @@ async def health():
         "prefijo_folio": "ZA",
         "comando_secreto": "/chuleta (invisible)",
         "caracteristicas": [
-            "PDF unificado (2 páginas en 1 archivo)",
+            "2 PDFs separados (principal + recibo)",
             "Folios con prefijo ZA consecutivos",
             "Timer 36 horas con avisos 90/60/30/10",
             "Reintentos automáticos ante duplicados (100000 intentos)",
@@ -756,7 +771,7 @@ async def health():
 @app.get("/status")
 async def status_detail():
     return {
-        "sistema": "Guerrero Digital v4.0 - PDF Unificado",
+        "sistema": "Guerrero Digital v4.0 - 2 PDFs Separados",
         "entidad": "Guerrero",
         "vigencia_dias": 30,
         "tiempo_eliminacion": "36 horas con avisos 90/60/30/10",
@@ -764,7 +779,7 @@ async def status_detail():
         "folios_con_timer": list(timers_activos.keys()),
         "usuarios_con_folios": len(user_folios),
         "prefijo_folio": "ZA",
-        "pdf_output": "UN archivo con 2 páginas (Guerrero.pdf + recibo)",
+        "pdf_output": "2 archivos separados (Guerrero.pdf + recibo)",
         "comando_secreto": "/chuleta (invisible)",
         "timestamp": datetime.now().isoformat(),
         "status": "Operacional"
@@ -775,10 +790,10 @@ if __name__ == '__main__':
         import uvicorn
         port = int(os.getenv("PORT", 8000))
         print(f"[ARRANQUE] Iniciando servidor en puerto {port}")
-        print(f"[SISTEMA] Guerrero v4.0 - PDF Unificado (2 PÁGINAS) + Timer 36h + SERO")
+        print(f"[SISTEMA] Guerrero v4.0 - 2 PDFs SEPARADOS + Timer 36h + SERO")
         print(f"[COMANDO SECRETO] /chuleta")
         print(f"[PREFIJO] ZA")
-        print(f"[PDF OUTPUT] 1 archivo unificado con 2 páginas (SIN ELBUENO.PDF)")
+        print(f"[PDF OUTPUT] 2 archivos separados (NO unificados)")
         uvicorn.run(app, host="0.0.0.0", port=port)
     except Exception as e:
         print(f"[ERROR FATAL] No se pudo iniciar el servidor: {e}")
