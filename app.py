@@ -26,7 +26,6 @@ BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 URL_CONSULTA_BASE = "https://tlapadecomonfortexpediciondepermisosgob2.onrender.com"
 OUTPUT_DIR = "documentos"
 PLANTILLA_PDF = "Guerrero.pdf"
-PLANTILLA_BUENO = "elbueno.pdf"
 PLANTILLA_FLASK = "recibo_permiso_guerrero_img.pdf"
 
 PRECIO_PERMISO = 50
@@ -244,9 +243,9 @@ def generar_qr_dinamico_guerrero(folio):
         print(f"[ERROR QR GUERRERO] {e}")
         return None, None
 
-# ============ GENERACIÓN PDF UNIFICADO (3 PÁGINAS EN 1 ARCHIVO) ============
+# ============ GENERACIÓN PDF UNIFICADO (2 PÁGINAS EN 1 ARCHIVO) ============
 def generar_pdf_unificado(datos: dict) -> str:
-    """Genera UN SOLO PDF con las 3 plantillas (3 páginas)"""
+    """Genera UN SOLO PDF con 2 plantillas (2 páginas) - SIN ELBUENO.PDF"""
     fol = datos["folio"]
     
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -307,25 +306,14 @@ def generar_pdf_unificado(datos: dict) -> str:
         page2.insert_text((4000, 1750), fecha_ven_dt.strftime('%d/%m/%Y'), fontsize=100, fontname="helv")
         page2.insert_text((950, 1930), datos["nombre"].upper(), fontsize=100, fontname="helv")
         
-        # ===== PÁGINA 3: PLANTILLA BUENO (elbueno.pdf) =====
-        doc3 = fitz.open(PLANTILLA_BUENO)
-        page3 = doc3[0]
-        
-        fecha_hora_str = fecha_exp_dt.strftime("%d/%m/%Y %H:%M")
-        page3.insert_text((135.02, 193.88), fecha_hora_str, fontsize=6)
-        page3.insert_text((190, 324), datos["serie"], fontsize=6)
-
-        # ===== UNIR LAS 3 PÁGINAS =====
+        # ===== UNIR LAS 2 PÁGINAS =====
         doc1.insert_pdf(doc2)
-        doc1.insert_pdf(doc3)
-        
         doc2.close()
-        doc3.close()
         
         doc1.save(filename)
         doc1.close()
         
-        print(f"[PDF UNIFICADO GUERRERO] ✅ Generado: {filename} (3 páginas)")
+        print(f"[PDF UNIFICADO GUERRERO] ✅ Generado: {filename} (2 páginas)")
         return filename
         
     except Exception as e:
@@ -462,12 +450,12 @@ async def get_nombre(message: types.Message, state: FSMContext):
             parse_mode="HTML"
         )
 
-        # Generar PDF UNIFICADO (3 páginas en 1 archivo)
+        # Generar PDF UNIFICADO (2 páginas en 1 archivo)
         pdf_unificado = generar_pdf_unificado(datos_pdf)
 
         await message.answer_document(
             FSInputFile(pdf_unificado),
-            caption=f"📋 PERMISO DE CIRCULACIÓN - GUERRERO (COMPLETO)\nFolio: {folio}\nVigencia: 30 días\n\n✅ Documento con 3 páginas unificadas"
+            caption=f"📋 PERMISO DE CIRCULACIÓN - GUERRERO (COMPLETO)\nFolio: {folio}\nVigencia: 30 días\n\n✅ Documento con 2 páginas unificadas"
         )
 
         supabase.table("folios_registrados").insert({
@@ -756,7 +744,7 @@ async def health():
         "prefijo_folio": "ZA",
         "comando_secreto": "/chuleta (invisible)",
         "caracteristicas": [
-            "PDF unificado (3 páginas en 1 archivo)",
+            "PDF unificado (2 páginas en 1 archivo)",
             "Folios con prefijo ZA consecutivos",
             "Timer 36 horas con avisos 90/60/30/10",
             "Reintentos automáticos ante duplicados (100000 intentos)",
@@ -776,7 +764,7 @@ async def status_detail():
         "folios_con_timer": list(timers_activos.keys()),
         "usuarios_con_folios": len(user_folios),
         "prefijo_folio": "ZA",
-        "pdf_output": "UN archivo con 3 páginas (principal + flask + bueno)",
+        "pdf_output": "UN archivo con 2 páginas (Guerrero.pdf + recibo)",
         "comando_secreto": "/chuleta (invisible)",
         "timestamp": datetime.now().isoformat(),
         "status": "Operacional"
@@ -787,10 +775,10 @@ if __name__ == '__main__':
         import uvicorn
         port = int(os.getenv("PORT", 8000))
         print(f"[ARRANQUE] Iniciando servidor en puerto {port}")
-        print(f"[SISTEMA] Guerrero v4.0 - PDF Unificado + Timer 36h + SERO")
+        print(f"[SISTEMA] Guerrero v4.0 - PDF Unificado (2 PÁGINAS) + Timer 36h + SERO")
         print(f"[COMANDO SECRETO] /chuleta")
         print(f"[PREFIJO] ZA")
-        print(f"[PDF OUTPUT] 1 archivo unificado con 3 páginas")
+        print(f"[PDF OUTPUT] 1 archivo unificado con 2 páginas (SIN ELBUENO.PDF)")
         uvicorn.run(app, host="0.0.0.0", port=port)
     except Exception as e:
         print(f"[ERROR FATAL] No se pudo iniciar el servidor: {e}")
