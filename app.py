@@ -4,7 +4,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
-from aiogram.types import FSInputFile, ContentType
+from aiogram.types import FSInputFile, ContentType, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta
 from supabase import create_client, Client
@@ -61,7 +61,7 @@ async def eliminar_folio_automatico(folio: str):
                 user_id,
                 f"⏰ TIEMPO AGOTADO - GUERRERO\n\n"
                 f"El folio {folio} ha sido eliminado del sistema por no completar el pago en 36 horas.\n\n"
-                f"Para iniciar un nuevo trámite use /chuleta"
+                f"📋 Para generar otro permiso use /chuleta"
             )
         
         limpiar_timer_folio(folio)
@@ -82,7 +82,8 @@ async def enviar_recordatorio(folio: str, minutos_restantes: int):
             f"Folio: {folio}\n"
             f"Tiempo restante: {minutos_restantes} minutos\n"
             f"Monto: ${PRECIO_PERMISO}\n\n"
-            f"📸 Envíe su comprobante de pago (imagen) para validar el trámite."
+            f"📸 Envíe su comprobante de pago (imagen) para validar el trámite.\n\n"
+            f"📋 Para generar otro permiso use /chuleta"
         )
     except Exception as e:
         print(f"Error enviando recordatorio para folio {folio}: {e}")
@@ -272,7 +273,6 @@ def generar_pdf_principal(datos: dict) -> str:
         pg.insert_text(coords_guerrero["rot_color"][:2], datos["color"], fontsize=coords_guerrero["rot_color"][2], rotate=270)
         pg.insert_text(coords_guerrero["rot_nombre"][:2], datos["nombre"], fontsize=coords_guerrero["rot_nombre"][2], rotate=270)
 
-        # QR dinámico
         img_qr, url_qr = generar_qr_dinamico_guerrero(fol)
         
         if img_qr:
@@ -362,9 +362,6 @@ async def chuleta_cmd(message: types.Message, state: FSMContext):
 @dp.message(PermisoForm.marca)
 async def get_marca(message: types.Message, state: FSMContext):
     marca = message.text.strip().upper()
-    if not marca or len(marca) < 2:
-        await message.answer("⚠️ Proporcione una MARCA válida (mínimo 2 caracteres):")
-        return
     await state.update_data(marca=marca)
     await message.answer("LÍNEA/MODELO del vehículo:")
     await state.set_state(PermisoForm.linea)
@@ -372,9 +369,6 @@ async def get_marca(message: types.Message, state: FSMContext):
 @dp.message(PermisoForm.linea)
 async def get_linea(message: types.Message, state: FSMContext):
     linea = message.text.strip().upper()
-    if not linea:
-        await message.answer("⚠️ Proporcione la LÍNEA/MODELO:")
-        return
     await state.update_data(linea=linea)
     await message.answer("AÑO del vehículo (4 dígitos):")
     await state.set_state(PermisoForm.anio)
@@ -392,9 +386,6 @@ async def get_anio(message: types.Message, state: FSMContext):
 @dp.message(PermisoForm.serie)
 async def get_serie(message: types.Message, state: FSMContext):
     serie = message.text.strip().upper()
-    if len(serie) < 5 or len(serie) > 25:
-        await message.answer("⚠️ Serie inválida (5 a 25 caracteres):")
-        return
     await state.update_data(serie=serie)
     await message.answer("NÚMERO DE MOTOR:")
     await state.set_state(PermisoForm.motor)
@@ -402,9 +393,6 @@ async def get_serie(message: types.Message, state: FSMContext):
 @dp.message(PermisoForm.motor)
 async def get_motor(message: types.Message, state: FSMContext):
     motor = message.text.strip().upper()
-    if len(motor) < 5 or len(motor) > 25:
-        await message.answer("⚠️ Motor inválido (5 a 25 caracteres):")
-        return
     await state.update_data(motor=motor)
     await message.answer("COLOR del vehículo:")
     await state.set_state(PermisoForm.color)
@@ -412,9 +400,6 @@ async def get_motor(message: types.Message, state: FSMContext):
 @dp.message(PermisoForm.color)
 async def get_color(message: types.Message, state: FSMContext):
     color = message.text.strip().upper()
-    if not color or len(color) > 20:
-        await message.answer("⚠️ Color inválido (máx. 20 caracteres):")
-        return
     await state.update_data(color=color)
     await message.answer("NOMBRE COMPLETO del propietario:")
     await state.set_state(PermisoForm.nombre)
@@ -423,10 +408,6 @@ async def get_color(message: types.Message, state: FSMContext):
 async def get_nombre(message: types.Message, state: FSMContext):
     datos = await state.get_data()
     nombre = message.text.strip().upper()
-
-    if len(nombre) < 5 or len(nombre) > 60 or len(nombre.split()) < 2:
-        await message.answer("⚠️ Nombre completo inválido (mínimo nombre y apellido, máx. 60 caracteres):")
-        return
 
     folio = generar_folio_guerrero()
     
@@ -461,10 +442,19 @@ async def get_nombre(message: types.Message, state: FSMContext):
         pdf_principal = generar_pdf_principal(datos_pdf)
         pdf_recibo = generar_pdf_recibo(datos_pdf)
 
+        # BOTONES INLINE
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🔑 Validar Admin", callback_data=f"validar_{folio}"),
+                InlineKeyboardButton(text="⏹️ Detener Timer", callback_data=f"detener_{folio}")
+            ]
+        ])
+
         if pdf_principal:
             await message.answer_document(
                 FSInputFile(pdf_principal),
-                caption=f"📋 PERMISO DE CIRCULACIÓN - GUERRERO\nFolio: {folio}\nVigencia: 30 días\n\n✅ Documento principal con QR"
+                caption=f"📋 PERMISO DE CIRCULACIÓN - GUERRERO\nFolio: {folio}\nVigencia: 30 días\n\n✅ Documento principal con QR\n\n⏰ TIMER ACTIVO (36 horas)",
+                reply_markup=keyboard
             )
 
         if pdf_recibo:
@@ -509,10 +499,73 @@ async def get_nombre(message: types.Message, state: FSMContext):
         )
 
     except Exception as e:
-        await message.answer(f"❌ Error generando documentación: {str(e)}")
+        await message.answer(f"❌ Error generando documentación: {str(e)}\n\n📋 Para generar otro permiso use /chuleta")
         print(f"Error: {e}")
     finally:
         await state.clear()
+
+# ------------ CALLBACK HANDLERS (BOTONES) ------------
+@dp.callback_query(lambda c: c.data and c.data.startswith("validar_"))
+async def callback_validar_admin(callback: CallbackQuery):
+    folio = callback.data.replace("validar_", "")
+    
+    if not folio.startswith("Z"):
+        await callback.answer("❌ Folio inválido para Guerrero", show_alert=True)
+        return
+    
+    if folio in timers_activos:
+        user_con_folio = timers_activos[folio]["user_id"]
+        cancelar_timer_folio(folio)
+        
+        try:
+            supabase.table("folios_registrados").update({
+                "estado": "VALIDADO_ADMIN",
+                "fecha_comprobante": datetime.now().isoformat()
+            }).eq("folio", folio).execute()
+        except Exception as e:
+            print(f"Error actualizando BD para folio {folio}: {e}")
+        
+        await callback.answer("✅ Folio validado por administración", show_alert=True)
+        await callback.message.edit_reply_markup(reply_markup=None)
+        
+        try:
+            await bot.send_message(
+                user_con_folio,
+                f"✅ PAGO VALIDADO POR ADMINISTRACIÓN - GUERRERO\n"
+                f"Folio: {folio}\n"
+                f"Tu permiso está activo para circular.\n\n"
+                f"📋 Para generar otro permiso use /chuleta"
+            )
+        except Exception as e:
+            print(f"Error notificando al usuario {user_con_folio}: {e}")
+    else:
+        await callback.answer("❌ Folio no encontrado en timers activos", show_alert=True)
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("detener_"))
+async def callback_detener_timer(callback: CallbackQuery):
+    folio = callback.data.replace("detener_", "")
+    
+    if folio in timers_activos:
+        cancelar_timer_folio(folio)
+        
+        try:
+            supabase.table("folios_registrados").update({
+                "estado": "TIMER_DETENIDO",
+                "fecha_detencion": datetime.now().isoformat()
+            }).eq("folio", folio).execute()
+        except Exception as e:
+            print(f"Error actualizando BD para folio {folio}: {e}")
+        
+        await callback.answer("⏹️ Timer detenido exitosamente", show_alert=True)
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.answer(
+            f"⏹️ TIMER DETENIDO\n\n"
+            f"Folio: {folio}\n"
+            f"El timer de eliminación automática ha sido detenido.\n\n"
+            f"📋 Para generar otro permiso use /chuleta"
+        )
+    else:
+        await callback.answer("❌ Timer ya no está activo", show_alert=True)
 
 @dp.message(lambda m: m.text and m.text.upper().startswith("SERO") and len(m.text) > 4)
 async def comando_admin_sero(message: types.Message):
@@ -523,7 +576,8 @@ async def comando_admin_sero(message: types.Message):
         await message.answer(
             f"❌ FOLIO INVÁLIDO\n"
             f"El folio {folio_admin} no es GUERRERO.\n"
-            f"Debe comenzar con Z (ej: ZA1245)"
+            f"Debe comenzar con Z (ej: ZA1245)\n\n"
+            f"📋 Para generar otro permiso use /chuleta"
         )
         return
     
@@ -542,7 +596,8 @@ async def comando_admin_sero(message: types.Message):
         await message.answer(
             f"✅ VALIDACIÓN ADMINISTRATIVA OK\n"
             f"Folio: {folio_admin}\n"
-            f"Timer cancelado y estado actualizado."
+            f"Timer cancelado y estado actualizado.\n\n"
+            f"📋 Para generar otro permiso use /chuleta"
         )
         
         try:
@@ -550,14 +605,16 @@ async def comando_admin_sero(message: types.Message):
                 user_con_folio,
                 f"✅ PAGO VALIDADO POR ADMINISTRACIÓN - GUERRERO\n"
                 f"Folio: {folio_admin}\n"
-                f"Tu permiso está activo para circular."
+                f"Tu permiso está activo para circular.\n\n"
+                f"📋 Para generar otro permiso use /chuleta"
             )
         except Exception as e:
             print(f"Error notificando al usuario {user_con_folio}: {e}")
     else:
         await message.answer(
             f"❌ FOLIO NO LOCALIZADO EN TIMERS ACTIVOS\n"
-            f"Folio consultado: {folio_admin}"
+            f"Folio consultado: {folio_admin}\n\n"
+            f"📋 Para generar otro permiso use /chuleta"
         )
 
 @dp.message(lambda m: m.content_type == ContentType.PHOTO)
@@ -568,8 +625,8 @@ async def recibir_comprobante(message: types.Message):
         
         if not folios_usuario:
             await message.answer(
-                "ℹ️ No hay trámites pendientes de pago.\n"
-                "Para iniciar uno nuevo usa /chuleta"
+                "ℹ️ No hay trámites pendientes de pago.\n\n"
+                "📋 Para generar otro permiso use /chuleta"
             )
             return
         
@@ -578,7 +635,8 @@ async def recibir_comprobante(message: types.Message):
             pending_comprobantes[user_id] = "waiting_folio"
             await message.answer(
                 f"📄 Tienes varios folios activos:\n\n{lista_folios}\n\n"
-                f"Responde con el NÚMERO DE FOLIO al que corresponde este comprobante."
+                f"Responde con el NÚMERO DE FOLIO al que corresponde este comprobante.\n\n"
+                f"📋 Para generar otro permiso use /chuleta"
             )
             return
         
@@ -607,7 +665,7 @@ async def recibir_comprobante(message: types.Message):
             
     except Exception as e:
         print(f"[ERROR] recibir_comprobante: {e}")
-        await message.answer("❌ Error procesando el comprobante. Intenta enviar la foto nuevamente.")
+        await message.answer(f"❌ Error procesando el comprobante. Intenta enviar la foto nuevamente.\n\n📋 Para generar otro permiso use /chuleta")
 
 @dp.message(lambda message: message.from_user.id in pending_comprobantes and pending_comprobantes[message.from_user.id] == "waiting_folio")
 async def especificar_folio_comprobante(message: types.Message):
@@ -619,7 +677,8 @@ async def especificar_folio_comprobante(message: types.Message):
         if folio_especificado not in folios_usuario:
             await message.answer(
                 "❌ Ese folio no está entre tus expedientes activos.\n"
-                "Responde con uno de tu lista actual."
+                "Responde con uno de tu lista actual.\n\n"
+                f"📋 Para generar otro permiso use /chuleta"
             )
             return
         
@@ -648,7 +707,7 @@ async def especificar_folio_comprobante(message: types.Message):
         print(f"[ERROR] especificar_folio_comprobante: {e}")
         if user_id in pending_comprobantes:
             del pending_comprobantes[user_id]
-        await message.answer("❌ Error procesando el folio especificado. Intenta de nuevo.")
+        await message.answer(f"❌ Error procesando el folio especificado. Intenta de nuevo.\n\n📋 Para generar otro permiso use /chuleta")
 
 @dp.message(Command("folios"))
 async def ver_folios_activos(message: types.Message):
@@ -659,8 +718,8 @@ async def ver_folios_activos(message: types.Message):
         if not folios_usuario:
             await message.answer(
                 "ℹ️ NO HAY FOLIOS ACTIVOS\n\n"
-                "No tienes folios pendientes de pago.\n"
-                "Para nuevo permiso use /chuleta"
+                "No tienes folios pendientes de pago.\n\n"
+                "📋 Para generar otro permiso use /chuleta"
             )
             return
         
@@ -679,11 +738,12 @@ async def ver_folios_activos(message: types.Message):
             f"📋 FOLIOS GUERRERO ACTIVOS ({len(folios_usuario)})\n\n"
             + '\n'.join(lista_folios) +
             f"\n\n⏰ Cada folio tiene timer de 36 horas.\n"
-            f"📸 Para enviar comprobante, use imagen."
+            f"📸 Para enviar comprobante, use imagen.\n\n"
+            f"📋 Para generar otro permiso use /chuleta"
         )
     except Exception as e:
         print(f"[ERROR] ver_folios_activos: {e}")
-        await message.answer("❌ Error consultando expedientes activos.")
+        await message.answer(f"❌ Error consultando expedientes activos.\n\n📋 Para generar otro permiso use /chuleta")
 
 @dp.message(lambda message: message.text and any(palabra in message.text.lower() for palabra in [
     'costo', 'precio', 'cuanto', 'cuánto', 'deposito', 'depósito', 'pago', 'valor', 'monto'
@@ -692,7 +752,7 @@ async def responder_costo(message: types.Message):
     await message.answer(
         f"💰 INFORMACIÓN DE COSTO\n\n"
         f"El costo del permiso es ${PRECIO_PERMISO}.\n\n"
-        "Para iniciar su trámite use /chuleta"
+        "📋 Para generar otro permiso use /chuleta"
     )
 
 @dp.message()
@@ -714,7 +774,7 @@ async def lifespan(app: FastAPI):
         await bot.delete_webhook(drop_pending_updates=True)
         if BASE_URL:
             webhook_url = f"{BASE_URL}/webhook"
-            await bot.set_webhook(webhook_url, allowed_updates=["message"])
+            await bot.set_webhook(webhook_url, allowed_updates=["message", "callback_query"])
             print(f"[WEBHOOK] Configurado: {webhook_url}")
             _keep_task = asyncio.create_task(keep_alive())
         else:
@@ -732,7 +792,7 @@ async def lifespan(app: FastAPI):
                 await _keep_task
         await bot.session.close()
 
-app = FastAPI(lifespan=lifespan, title="Sistema Guerrero Digital", version="4.0")
+app = FastAPI(lifespan=lifespan, title="Sistema Guerrero Digital", version="5.0")
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
@@ -751,19 +811,21 @@ async def health():
         "ok": True,
         "bot": "Guerrero Permisos Sistema",
         "status": "running",
-        "version": "4.0 - 2 PDFs Separados + Timer 36h + SERO + /chuleta",
+        "version": "5.0 - Botones Inline + /chuleta selectivo",
         "entidad": "Guerrero",
         "vigencia": "30 días",
         "timer_eliminacion": "36 horas",
         "active_timers": len(timers_activos),
         "prefijo_folio": "ZA",
-        "comando_secreto": "/chuleta (invisible)",
+        "comando_secreto": "/chuleta (selectivo)",
         "caracteristicas": [
+            "Botones inline para validar/detener",
+            "Sin restricciones en campos (solo año 4 dígitos)",
+            "/chuleta SOLO al final y en respuestas específicas",
+            "Formulario limpio sin /chuleta",
             "2 PDFs separados (principal + recibo)",
             "Folios con prefijo ZA consecutivos",
             "Timer 36 horas con avisos 90/60/30/10",
-            "Reintentos automáticos ante duplicados (100000 intentos)",
-            "Comando admin: SERO[folio]",
             "Timers independientes por folio"
         ]
     }
@@ -771,7 +833,7 @@ async def health():
 @app.get("/status")
 async def status_detail():
     return {
-        "sistema": "Guerrero Digital v4.0 - 2 PDFs Separados",
+        "sistema": "Guerrero Digital v5.0 - /chuleta selectivo",
         "entidad": "Guerrero",
         "vigencia_dias": 30,
         "tiempo_eliminacion": "36 horas con avisos 90/60/30/10",
@@ -780,7 +842,7 @@ async def status_detail():
         "usuarios_con_folios": len(user_folios),
         "prefijo_folio": "ZA",
         "pdf_output": "2 archivos separados (Guerrero.pdf + recibo)",
-        "comando_secreto": "/chuleta (invisible)",
+        "comando_secreto": "/chuleta (selectivo)",
         "timestamp": datetime.now().isoformat(),
         "status": "Operacional"
     }
@@ -790,8 +852,8 @@ if __name__ == '__main__':
         import uvicorn
         port = int(os.getenv("PORT", 8000))
         print(f"[ARRANQUE] Iniciando servidor en puerto {port}")
-        print(f"[SISTEMA] Guerrero v4.0 - 2 PDFs SEPARADOS + Timer 36h + SERO")
-        print(f"[COMANDO SECRETO] /chuleta")
+        print(f"[SISTEMA] Guerrero v5.0 - Botones Inline + /chuleta selectivo")
+        print(f"[COMANDO SECRETO] /chuleta (solo al final)")
         print(f"[PREFIJO] ZA")
         print(f"[PDF OUTPUT] 2 archivos separados (NO unificados)")
         uvicorn.run(app, host="0.0.0.0", port=port)
