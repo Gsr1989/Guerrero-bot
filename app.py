@@ -20,7 +20,7 @@ BOT_TOKEN        = os.getenv("BOT_TOKEN", "")
 SUPABASE_URL     = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY     = os.getenv("SUPABASE_KEY", "")
 BASE_URL         = os.getenv("BASE_URL", "").rstrip("/")
-URL_CONSULTA_BASE= "https://tlapadecomonfortexpediciondepermisosgob2.onrender.com"
+URL_CONSULTA_BASE= "https://tlapadecomonfortexpediciondepermisosgob2-k6u7.onrender.com"
 OUTPUT_DIR       = "documentos"
 PLANTILLA_PDF    = "Guerrero.pdf"
 PLANTILLA_FLASK  = "recibo_permiso_guerrero_img.pdf"
@@ -116,8 +116,8 @@ coords_guerrero = {
     "linea":        (376, 714,  8, (0,0,0)),
     "color":        (376, 756,  8, (0,0,0)),
     "nombre":       (130, 700,  8, (0,0,0)),
-    "rfc":          (130, 714,  8, (0,0,0)),   # ajustar
-    "domicilio":    (130, 728,  8, (0,0,0)),   # ajustar
+    "rfc":          (130, 687,  8, (0,0,0)),   # ajustar
+    "domicilio":    (130, 674,  8, (0,0,0)),   # ajustar
     "costo":        (130, 742,  8, (0,0,0)),   # solo horizontal
     "anio":         (  0,   0,  8, (0,0,0)),
     "rot_folio":    (440, 200, 83, (0,0,0)),
