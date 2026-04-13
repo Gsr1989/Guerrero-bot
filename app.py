@@ -113,7 +113,7 @@ coords_guerrero = {
     "serie":        (366, 742,  8, (0,0,0)),
     "motor":        (366, 729,  8, (0,0,0)),
     "marca":        (366, 700,  8, (0,0,0)),
-    "linea":        (376, 714,  8, (0,0,0)),
+    "linea":        (366, 714,  8, (0,0,0)),
     "color":        (366, 756,  8, (0,0,0)),
     "nombre":       (135, 700,  8, (0,0,0)),
     "rfc":          (135, 713,  8, (0,0,0)),   # ajustar
@@ -226,7 +226,7 @@ def generar_pdf_permiso(datos: dict) -> str:
 
         # QR reducido 25% → 97×97, coordenadas originales
         qr_pix, _ = qr_pixmap(fol)
-        pg.insert_image(fitz.Rect(80, 450, 80+97, 430+97), pixmap=qr_pix, overlay=True)
+        pg.insert_image(fitz.Rect(80, 430, 80+97, 430+97), pixmap=qr_pix, overlay=True)
 
         doc.save(path); doc.close()
         print(f"[PERMISO] OK: {path}")
@@ -284,12 +284,12 @@ P_FS_IMP    = 100
 # ======================================================
 
 coords_recibo = {
-    "folio":     (90, 207, 12, (0,0,0)),
-    "nombre":    (130, 222, 12, (0,0,0)),
-    "domicilio": (130, 237, 12, (0,0,0)),
-    "costo":     (440, 345, 12, (0,0,0)),
-    "fecha_exp": (265, 207, 12, (0,0,0)),
-    "fecha_ven": (455, 207, 12, (0,0,0)),
+    "folio":     (85, 210, 12, (0,0,0)),
+    "nombre":    (120, 229, 12, (0,0,0)),
+    "domicilio": (130, 253, 12, (0,0,0)),
+    "costo":     (435, 350, 12, (0,0,0)),
+    "fecha_exp": (265, 210, 12, (0,0,0)),
+    "fecha_ven": (440, 210, 12, (0,0,0)),
     "qr":        (55, 307, 110, None)
 }
 
