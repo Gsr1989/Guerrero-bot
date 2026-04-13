@@ -157,14 +157,14 @@ def obtener_folios_usuario(user_id: int) -> list:
 # ---------------- COORDENADAS GUERRERO ----------------
 coords_guerrero = {
     "folio": (376,769,8,(1,0,0)),
-    "fecha_exp": (122,755,8,(0,0,0)),
-    "fecha_ven": (122,768,8,(0,0,0)),
+    "fecha_exp": (130,755,8,(0,0,0)),
+    "fecha_ven": (130,768,8,(0,0,0)),
     "serie": (376,742,8,(0,0,0)),
     "motor": (376,729,8,(0,0,0)),
     "marca": (376,700,8,(0,0,0)),
     "linea": (376,714,8,(0,0,0)),
     "color": (376,756,8,(0,0,0)),
-    "nombre": (122,700,8,(0,0,0)),
+    "nombre": (130,700,8,(0,0,0)),
     "anio": (0,0,8,(0,0,0)),
     "rot_folio": (440,200,83,(0,0,0)),
     "rot_fecha_exp": (77,205,8,(0,0,0)),
@@ -172,17 +172,17 @@ coords_guerrero = {
     "rot_serie": (168,110,18,(0,0,0)),
     "rot_motor": (224,110,18,(0,0,0)),
     "rot_marca": (280,110,18,(0,0,0)),
-    "rot_linea": (280,340,18,(0,0,0)),
+    "rot_linea": (280,300,18,(0,0,0)),
     "rot_anio": (305,530,18,(0,0,0)),
-    "rot_color": (224,410,18,(0,0,0)),
+    "rot_color": (224,400,18,(0,0,0)),
     "rot_nombre": (115,205,8,(0,0,0))
 }
 
 # ------------ FUNCIÓN GENERAR FOLIO GUERRERO ------------
 def generar_folio_guerrero():
     letras = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    prefijo = "ZA"
-    inicio_num = 1245
+    prefijo = "ZY"
+    inicio_num = 4917
     max_intentos = 100000
 
     try:
