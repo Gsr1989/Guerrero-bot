@@ -279,6 +279,26 @@ P_X_IMPORTE = 3800
 P_Y_IMPORTE = 2850
 P_FS_IMP    = 100
 
+# ======================================================
+#  COORDENADAS RECIBO (IGUAL QUE LA HOJA 1)
+# ======================================================
+
+coords_recibo = {
+    "folio":     (300, 400, 12, (0,0,0)),
+    "nombre":    (300, 430, 12, (0,0,0)),
+    "rfc":       (300, 460, 12, (0,0,0)),
+    "domicilio": (300, 490, 12, (0,0,0)),
+    "costo":     (300, 520, 12, (0,0,0)),
+    "fecha_exp": (300, 550, 12, (0,0,0)),
+    "fecha_ven": (300, 580, 12, (0,0,0)),
+    "qr":        (300, 620, 120, None)
+}
+
+
+# ======================================================
+#  PDF RECIBO (SIN MAMADAS, SOLO COORDENADAS)
+# ======================================================
+
 def generar_pdf_recibo(datos: dict) -> str:
     fol  = datos["folio"]
     path = f"{OUTPUT_DIR}/{fol}_recibo_tmp.pdf"
@@ -287,74 +307,41 @@ def generar_pdf_recibo(datos: dict) -> str:
         doc  = fitz.open(PLANTILLA_FLASK)
         page = doc[0]
 
-        # 🔥 ESTO ES CLAVE
+        # IMPORTANTE PARA QUE SE VEA
         page.wrap_contents()
 
-        # 📐 OBTENER CENTRO REAL DEL PDF
-        width  = page.rect.width
-        height = page.rect.height
+        # TEXTO (SOLO VALORES)
+        for campo in ["folio","nombre","rfc","domicilio","costo","fecha_exp","fecha_ven"]:
+            if campo in coords_recibo:
 
-        cx = width / 2
-        cy = height / 2
+                x, y, size, color = coords_recibo[campo]
 
-        exp  = datos["fecha_exp_obj"]
-        ven  = datos["fecha_ven_obj"]
+                valor = datos.get(campo, "")
 
-        exp_str = exp.strftime('%d/%m/%Y')
-        ven_str = ven.strftime('%d/%m/%Y')
+                if campo == "costo":
+                    valor = f"${valor}"
 
-        fs = 14  # tamaño decente para pruebas
+                page.insert_text(
+                    (x, y),
+                    str(valor),
+                    fontsize=size,
+                    color=color,
+                    fontname="helv"
+                )
 
-        # ======================================
-        # 🧾 TEXTO CENTRADO (RECIBO)
-        # ======================================
-
-        def center_text(y_offset, text):
-            page.insert_text(
-                (cx - 100, cy + y_offset),
-                text,
-                fontsize=fs,
-                fontname="helv",
-                overlay=True
-            )
-
-        # 🔥 TODO AL CENTRO
-        center_text(-120, f"FOLIO: {fol}")
-        center_text(-90,  f"NOMBRE: {datos['nombre']}")
-        center_text(-60,  f"RFC: {datos.get('rfc','N/A')}")
-        center_text(-30,  f"DOMICILIO: {datos.get('domicilio','')}")
-        center_text(0,    f"COSTO: ${datos.get('costo','')}")
-        center_text(30,   f"EXPEDICIÓN: {exp_str}")
-        center_text(60,   f"VENCIMIENTO: {ven_str}")
-
-        # ======================================
-        # 🔳 QR CENTRADO ABAJO
-        # ======================================
-
+        # QR
         qr_pix, _ = qr_pixmap(fol)
-
-        qr_size = 120
+        x, y, size, _ = coords_recibo["qr"]
 
         page.insert_image(
-            fitz.Rect(
-                cx - qr_size/2,
-                cy + 120,
-                cx + qr_size/2,
-                cy + 120 + qr_size
-            ),
-            pixmap=qr_pix,
-            overlay=True
+            fitz.Rect(x, y, x + size, y + size),
+            pixmap=qr_pix
         )
-
-        # ======================================
-        # 💾 GUARDAR
-        # ======================================
 
         doc.save(path)
         doc.close()
 
-        print(f"[RECIBO CENTRADO] OK: {path}")
-
+        print(f"[RECIBO OK] {path}")
         return path
 
     except Exception as e:
