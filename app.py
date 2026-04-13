@@ -107,14 +107,14 @@ def obtener_folios_usuario(uid: int) -> list:
 # ------------ COORDENADAS PERMISO (Guerrero.pdf) ------------
 # ⚠️  Ajusta rfc / domicilio / costo / rot_rfc / rot_domicilio segun tu plantilla
 coords_guerrero = {
-    "folio":        (366, 769,  8, (1,0,0)),
+    "folio":        (360, 769,  8, (1,0,0)),
     "fecha_exp":    (135, 755,  8, (0,0,0)),
     "fecha_ven":    (135, 768,  8, (0,0,0)),
-    "serie":        (366, 742,  8, (0,0,0)),
-    "motor":        (366, 729,  8, (0,0,0)),
-    "marca":        (366, 700,  8, (0,0,0)),
-    "linea":        (366, 714,  8, (0,0,0)),
-    "color":        (366, 756,  8, (0,0,0)),
+    "serie":        (360, 742,  8, (0,0,0)),
+    "motor":        (360, 729,  8, (0,0,0)),
+    "marca":        (360, 700,  8, (0,0,0)),
+    "linea":        (360, 714,  8, (0,0,0)),
+    "color":        (360, 756,  8, (0,0,0)),
     "nombre":       (135, 700,  8, (0,0,0)),
     "rfc":          (135, 713,  8, (0,0,0)),   # ajustar
     "domicilio":    (135, 726,  8, (0,0,0)),   # ajustar
@@ -226,7 +226,7 @@ def generar_pdf_permiso(datos: dict) -> str:
 
         # QR reducido 25% → 97×97, coordenadas originales
         qr_pix, _ = qr_pixmap(fol)
-        pg.insert_image(fitz.Rect(80, 415, 80+97, 415+97), pixmap=qr_pix, overlay=True)
+        pg.insert_image(fitz.Rect(80, 450, 80+97, 450+97), pixmap=qr_pix, overlay=True)
 
         doc.save(path); doc.close()
         print(f"[PERMISO] OK: {path}")
@@ -285,11 +285,11 @@ P_FS_IMP    = 100
 
 coords_recibo = {
     "folio":     (85, 208, 12, (0,0,0)),
-    "nombre":    (120, 229, 12, (0,0,0)),
-    "domicilio": (120, 260, 12, (0,0,0)),
+    "nombre":    (120, 233, 12, (0,0,0)),
+    "domicilio": (120, 252, 12, (0,0,0)),
     "costo":     (432, 352, 12, (0,0,0)),
     "fecha_exp": (265, 208, 12, (0,0,0)),
-    "fecha_ven": (465, 208, 12, (0,0,0)),
+    "fecha_ven": (480, 208, 12, (0,0,0)),
     "qr":        (55, 307, 110, None)
 }
 
