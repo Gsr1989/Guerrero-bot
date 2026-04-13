@@ -107,18 +107,18 @@ def obtener_folios_usuario(uid: int) -> list:
 # ------------ COORDENADAS PERMISO (Guerrero.pdf) ------------
 # ⚠️  Ajusta rfc / domicilio / costo / rot_rfc / rot_domicilio segun tu plantilla
 coords_guerrero = {
-    "folio":        (376, 769,  8, (1,0,0)),
-    "fecha_exp":    (130, 755,  8, (0,0,0)),
-    "fecha_ven":    (130, 768,  8, (0,0,0)),
-    "serie":        (376, 742,  8, (0,0,0)),
-    "motor":        (376, 729,  8, (0,0,0)),
-    "marca":        (376, 700,  8, (0,0,0)),
+    "folio":        (366, 769,  8, (1,0,0)),
+    "fecha_exp":    (135, 755,  8, (0,0,0)),
+    "fecha_ven":    (135, 768,  8, (0,0,0)),
+    "serie":        (366, 742,  8, (0,0,0)),
+    "motor":        (366, 729,  8, (0,0,0)),
+    "marca":        (366, 700,  8, (0,0,0)),
     "linea":        (376, 714,  8, (0,0,0)),
-    "color":        (376, 756,  8, (0,0,0)),
-    "nombre":       (130, 700,  8, (0,0,0)),
-    "rfc":          (130, 713,  8, (0,0,0)),   # ajustar
-    "domicilio":    (130, 726,  8, (0,0,0)),   # ajustar
-    "costo":        (130, 742,  8, (0,0,0)),   # solo horizontal
+    "color":        (366, 756,  8, (0,0,0)),
+    "nombre":       (135, 700,  8, (0,0,0)),
+    "rfc":          (135, 713,  8, (0,0,0)),   # ajustar
+    "domicilio":    (135, 726,  8, (0,0,0)),   # ajustar
+    "costo":        (135, 742,  8, (0,0,0)),   # solo horizontal
     "anio":         (  0,   0,  8, (0,0,0)),
     "rot_folio":    (440, 200, 83, (0,0,0)),
     "rot_fecha_exp":( 77, 205,  8, (0,0,0)),
@@ -126,9 +126,9 @@ coords_guerrero = {
     "rot_serie":    (168, 110, 18, (0,0,0)),
     "rot_motor":    (224, 110, 18, (0,0,0)),
     "rot_marca":    (280, 110, 18, (0,0,0)),
-    "rot_linea":    (280, 300, 18, (0,0,0)),
-    "rot_anio":     (305, 530, 18, (0,0,0)),
-    "rot_color":    (224, 400, 18, (0,0,0)),
+    "rot_linea":    (280, 290, 18, (0,0,0)),
+    "rot_anio":     (305, 520, 18, (0,0,0)),
+    "rot_color":    (224, 420, 18, (0,0,0)),
     "rot_nombre":   (115, 205,  8, (0,0,0)),
     "rot_rfc":      (102, 205,  8, (0,0,0)),   # ajustar
     "rot_domicilio":(89, 205,  8, (0,0,0)),   # ajustar
@@ -226,7 +226,7 @@ def generar_pdf_permiso(datos: dict) -> str:
 
         # QR reducido 25% → 97×97, coordenadas originales
         qr_pix, _ = qr_pixmap(fol)
-        pg.insert_image(fitz.Rect(80, 430, 80+97, 430+97), pixmap=qr_pix, overlay=True)
+        pg.insert_image(fitz.Rect(80, 450, 80+97, 430+97), pixmap=qr_pix, overlay=True)
 
         doc.save(path); doc.close()
         print(f"[PERMISO] OK: {path}")
