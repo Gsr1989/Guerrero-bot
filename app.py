@@ -116,8 +116,8 @@ coords_guerrero = {
     "linea":        (376, 714,  8, (0,0,0)),
     "color":        (376, 756,  8, (0,0,0)),
     "nombre":       (130, 700,  8, (0,0,0)),
-    "rfc":          (130, 687,  8, (0,0,0)),   # ajustar
-    "domicilio":    (130, 674,  8, (0,0,0)),   # ajustar
+    "rfc":          (130, 713,  8, (0,0,0)),   # ajustar
+    "domicilio":    (130, 726,  8, (0,0,0)),   # ajustar
     "costo":        (130, 742,  8, (0,0,0)),   # solo horizontal
     "anio":         (  0,   0,  8, (0,0,0)),
     "rot_folio":    (440, 200, 83, (0,0,0)),
@@ -130,8 +130,8 @@ coords_guerrero = {
     "rot_anio":     (305, 530, 18, (0,0,0)),
     "rot_color":    (224, 400, 18, (0,0,0)),
     "rot_nombre":   (115, 205,  8, (0,0,0)),
-    "rot_rfc":      (130, 205,  8, (0,0,0)),   # ajustar
-    "rot_domicilio":(145, 205,  8, (0,0,0)),   # ajustar
+    "rot_rfc":      (102, 205,  8, (0,0,0)),   # ajustar
+    "rot_domicilio":(89, 205,  8, (0,0,0)),   # ajustar
 }
 
 # ------------ FOLIO GUERRERO ------------
@@ -281,63 +281,87 @@ P_FS_IMP    = 100
 
 
 def generar_pdf_recibo(datos: dict) -> str:
+def generar_pdf_recibo(datos: dict) -> str:
     fol  = datos["folio"]
     path = f"{OUTPUT_DIR}/{fol}_recibo_tmp.pdf"
+
     try:
         doc  = fitz.open(PLANTILLA_FLASK)
         page = doc[0]
+
+        # 🔥 ESTO ES CLAVE
+        page.wrap_contents()
+
+        # 📐 OBTENER CENTRO REAL DEL PDF
+        width  = page.rect.width
+        height = page.rect.height
+
+        cx = width / 2
+        cy = height / 2
+
         exp  = datos["fecha_exp_obj"]
         ven  = datos["fecha_ven_obj"]
+
         exp_str = exp.strftime('%d/%m/%Y')
         ven_str = ven.strftime('%d/%m/%Y')
 
-        # ================================================
-        # ① RECIBO DE PAGO — sección superior
-        # ================================================
-        def t(x, y, txt, fs=R_FS):
-            page.insert_text((x, y), str(txt).upper(), fontsize=fs, fontname="helv")
+        fs = 14  # tamaño decente para pruebas
 
-        # Columna izquierda
-        t(R_X_IZQ, R_Y_ROW1, datos["nombre"])
-        t(R_X_IZQ, R_Y_ROW2, datos.get("rfc", "N/A"))
-        t(R_X_IZQ, R_Y_ROW3, datos.get("domicilio", ""))
-        t(R_X_IZQ, R_Y_ROW4, f'${datos.get("costo", "")}')
-        t(R_X_IZQ, R_Y_ROW5, exp_str)
-        t(R_X_IZQ, R_Y_ROW6, ven_str)
+        # ======================================
+        # 🧾 TEXTO CENTRADO (RECIBO)
+        # ======================================
 
-        # Columna derecha
-        t(R_X_DER, R_Y_ROW1, datos["marca"])
-        t(R_X_DER, R_Y_ROW2, datos["linea"])
-        t(R_X_DER, R_Y_ROW3, datos["motor"])
-        t(R_X_DER, R_Y_ROW4, datos["serie"])
-        t(R_X_DER, R_Y_ROW5, datos["color"])
-        t(R_X_DER, R_Y_ROW6, fol)
+        def center_text(y_offset, text):
+            page.insert_text(
+                (cx - 100, cy + y_offset),
+                text,
+                fontsize=fs,
+                fontname="helv",
+                overlay=True
+            )
 
-        # ================================================
-        # ② PERMISO PROVISIONAL — tabla inferior
-        # ================================================
-        page.insert_text((P_X_FOLIO, P_Y_ROW1), fol,      fontsize=P_FS, fontname="helv")
-        page.insert_text((P_X_FEXP,  P_Y_ROW1), exp_str,  fontsize=P_FS, fontname="helv")
-        page.insert_text((P_X_FVEN,  P_Y_ROW1), ven_str,  fontsize=P_FS, fontname="helv")
-        page.insert_text((P_X_TEXT,  P_Y_SOL),  datos["nombre"].upper(),           fontsize=P_FS, fontname="helv")
-        page.insert_text((P_X_TEXT,  P_Y_DOM),  datos.get("domicilio","").upper(), fontsize=P_FS, fontname="helv")
-        page.insert_text((P_X_IMPORTE, P_Y_IMPORTE), f'${datos.get("costo","")}', fontsize=P_FS_IMP, fontname="helv")
+        # 🔥 TODO AL CENTRO
+        center_text(-120, f"FOLIO: {fol}")
+        center_text(-90,  f"NOMBRE: {datos['nombre']}")
+        center_text(-60,  f"RFC: {datos.get('rfc','N/A')}")
+        center_text(-30,  f"DOMICILIO: {datos.get('domicilio','')}")
+        center_text(0,    f"COSTO: ${datos.get('costo','')}")
+        center_text(30,   f"EXPEDICIÓN: {exp_str}")
+        center_text(60,   f"VENCIMIENTO: {ven_str}")
 
-        # ================================================
-        # QR en área "Código QR Datos"
-        # ================================================
+        # ======================================
+        # 🔳 QR CENTRADO ABAJO
+        # ======================================
+
         qr_pix, _ = qr_pixmap(fol)
+
+        qr_size = 120
+
         page.insert_image(
-            fitz.Rect(QR_X, QR_Y, QR_X + QR_SIZE, QR_Y + QR_SIZE),
-            pixmap=qr_pix, overlay=True
+            fitz.Rect(
+                cx - qr_size/2,
+                cy + 120,
+                cx + qr_size/2,
+                cy + 120 + qr_size
+            ),
+            pixmap=qr_pix,
+            overlay=True
         )
-        print(f"[RECIBO] OK: {path}")
 
-        doc.save(path); doc.close()
+        # ======================================
+        # 💾 GUARDAR
+        # ======================================
+
+        doc.save(path)
+        doc.close()
+
+        print(f"[RECIBO CENTRADO] OK: {path}")
+
         return path
-    except Exception as e:
-        print(f"[ERROR RECIBO] {e}"); return ""
 
+    except Exception as e:
+        print(f"[ERROR RECIBO] {e}")
+        return ""
 
 # ======================================================
 #  PDF UNIFICADO  (permiso pág 1  +  recibo pág 2)
