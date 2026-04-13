@@ -279,8 +279,6 @@ P_X_IMPORTE = 3800
 P_Y_IMPORTE = 2850
 P_FS_IMP    = 100
 
-
-def generar_pdf_recibo(datos: dict) -> str:
 def generar_pdf_recibo(datos: dict) -> str:
     fol  = datos["folio"]
     path = f"{OUTPUT_DIR}/{fol}_recibo_tmp.pdf"
