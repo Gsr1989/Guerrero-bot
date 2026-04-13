@@ -226,7 +226,7 @@ def generar_pdf_permiso(datos: dict) -> str:
 
         # QR reducido 25% → 97×97, coordenadas originales
         qr_pix, _ = qr_pixmap(fol)
-        pg.insert_image(fitz.Rect(80, 450, 80+97, 450+97), pixmap=qr_pix, overlay=True)
+        pg.insert_image(fitz.Rect(80, 460, 80+97, 460+97), pixmap=qr_pix, overlay=True)
 
         doc.save(path); doc.close()
         print(f"[PERMISO] OK: {path}")
