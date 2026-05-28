@@ -25,9 +25,8 @@ OUTPUT_DIR        = "documentos"
 PLANTILLA_PDF     = "Guerrero.pdf"
 PLANTILLA_FLASK   = "recibo_permiso_guerrero_img.pdf"
 
-# ── Valores fijos ─────────────────────────────────────
 COSTO_FIJO     = "250"
-RFC_FIJO       = "XAXX010101000"   # RFC genérico público México
+RFC_FIJO       = "XAXX010101000"
 DOMICILIO_FIJO = "MEXICO"
 
 os.makedirs(OUTPUT_DIR,    exist_ok=True)
@@ -106,7 +105,121 @@ def limpiar_timer_folio(folio: str):
 def obtener_folios_usuario(uid: int) -> list:
     return user_folios.get(uid, [])
 
-# ------------ COORDENADAS PERMISO (Guerrero.pdf) ------------
+# ============ FOLIOS GUERRERO — WATERMARK =====================================
+# Prefijo fijo "ZY" + número de 4 dígitos: ZY4917, ZY4918, ...
+# El watermark guarda el último número asignado para que nunca baje.
+
+FOLIO_PREFIJO_GUE = "GUE"   # clave en tabla folio_watermark
+FOLIO_LETRAS      = "ZY"    # prefijo de los folios
+FOLIO_NUM_INICIO  = 4917    # primer número histórico
+_folio_counter    = {"siguiente": FOLIO_NUM_INICIO}
+_folio_lock       = asyncio.Lock()
+
+def _sb_leer_watermark_gue() -> int | None:
+    """Lee el último número asignado. Síncrono."""
+    try:
+        r = supabase.table("folio_watermark") \
+            .select("ultimo_asignado") \
+            .eq("prefijo", FOLIO_PREFIJO_GUE) \
+            .execute()
+        if r.data:
+            return r.data[0]["ultimo_asignado"]
+        return None
+    except Exception as e:
+        print(f"[ERROR] leer_watermark GUE: {e}")
+        return None
+
+def _sb_guardar_watermark_gue(numero: int):
+    """Persiste el máximo asignado. Solo avanza, nunca retrocede. Síncrono."""
+    try:
+        supabase.table("folio_watermark").upsert({
+            "prefijo":         FOLIO_PREFIJO_GUE,
+            "ultimo_asignado": numero
+        }).execute()
+        print(f"[WATERMARK GUE] Guardado: {FOLIO_LETRAS}{str(numero).zfill(4)}")
+    except Exception as e:
+        print(f"[ERROR] guardar_watermark GUE: {e}")
+
+def _sb_inicializar_folio_gue():
+    """
+    Al arrancar:
+    1) Lee watermark (máximo histórico real).
+    2) Si no existe, busca el máximo en DB activa y crea el watermark.
+    3) El contador NUNCA baja aunque se borren folios expirados.
+    Síncrono — llamar con asyncio.to_thread.
+    """
+    watermark = _sb_leer_watermark_gue()
+    if watermark is not None:
+        _folio_counter["siguiente"] = watermark + 1
+        print(f"[FOLIO GUE] Desde watermark: {FOLIO_LETRAS}{str(watermark).zfill(4)} "
+              f"-> siguiente: {_folio_counter['siguiente']}")
+        return
+
+    # Primera vez — construye watermark desde DB activa
+    try:
+        resp = supabase.table("folios_registrados") \
+            .select("folio") \
+            .eq("entidad", "Guerrero") \
+            .execute()
+        numeros = []
+        for row in resp.data or []:
+            f = row.get("folio", "")
+            if isinstance(f, str) and f.startswith(FOLIO_LETRAS) and len(f) == 6:
+                sufijo = f[len(FOLIO_LETRAS):]
+                if sufijo.isdigit():
+                    numeros.append(int(sufijo))
+        if numeros:
+            maximo = max(numeros)
+            _folio_counter["siguiente"] = maximo + 1
+            _sb_guardar_watermark_gue(maximo)
+            print(f"[FOLIO GUE] Desde DB (primera vez): {FOLIO_LETRAS}{str(maximo).zfill(4)} "
+                  f"-> siguiente: {_folio_counter['siguiente']}")
+        else:
+            _folio_counter["siguiente"] = FOLIO_NUM_INICIO
+            print(f"[FOLIO GUE] Sin folios previos, empezando desde "
+                  f"{FOLIO_LETRAS}{str(FOLIO_NUM_INICIO).zfill(4)}")
+    except Exception as e:
+        print(f"[ERROR] inicializar_folio GUE: {e}")
+        _folio_counter["siguiente"] = FOLIO_NUM_INICIO
+
+def _sb_folio_existe(folio: str) -> bool:
+    """Síncrono."""
+    try:
+        r = supabase.table("folios_registrados").select("folio").eq("folio", folio).execute()
+        return len(r.data) > 0
+    except Exception as e:
+        print(f"[ERROR] verificar folio {folio}: {e}")
+        return False
+
+def _generar_folio_guerrero_sync() -> str:
+    """
+    Síncrono — usar con asyncio.to_thread + _folio_lock.
+    Busca SIEMPRE hacia arriba desde el último asignado.
+    Nunca retrocede.
+    """
+    candidato = _folio_counter["siguiente"]
+    for _ in range(100_000):
+        if candidato > 9999:
+            # Agotamos ZY — en la práctica no pasa, pero por si acaso
+            print("[FOLIO GUE] Límite 9999 alcanzado")
+            break
+        folio = f"{FOLIO_LETRAS}{str(candidato).zfill(4)}"
+        if not _sb_folio_existe(folio):
+            _folio_counter["siguiente"] = candidato + 1
+            _sb_guardar_watermark_gue(candidato)
+            print(f"[FOLIO GUE] Asignado: {folio} (siguiente: {_folio_counter['siguiente']})")
+            return folio
+        print(f"[FOLIO GUE] {folio} ocupado -> probando siguiente")
+        candidato += 1
+    # Fallback extremo (prácticamente imposible)
+    return f"{FOLIO_LETRAS}9999"
+
+async def _generar_folio_guerrero() -> str:
+    """Async con Lock — evita race condition."""
+    async with _folio_lock:
+        return await asyncio.to_thread(_generar_folio_guerrero_sync)
+
+# ------------ COORDENADAS PDF ------------
 coords_guerrero = {
     "folio":         (360, 769,  8, (1,0,0)),
     "fecha_exp":     (135, 755,  8, (0,0,0)),
@@ -144,31 +257,7 @@ coords_recibo = {
     "qr":        ( 55, 307, 110, None),
 }
 
-# ------------ FOLIO GUERRERO ------------
-def _generar_folio_guerrero() -> str:
-    """Síncrono — usar con asyncio.to_thread."""
-    letras  = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    prefijo = "ZY"
-    try:
-        ex    = supabase.table("folios_registrados").select("folio").eq("entidad","Guerrero").execute().data
-        usados = {r["folio"] for r in ex if r["folio"] and r["folio"][:2] == prefijo and len(r["folio"]) == 6}
-    except Exception as e:
-        print(f"Error folios: {e}"); usados = set()
-    for i in range(100000):
-        num = 4917 + i
-        if num >= 10000: break
-        f = f"{prefijo}{str(num).zfill(4)}"
-        if f not in usados: return f
-    for a in letras:
-        for b in letras:
-            par = a + b
-            if par == prefijo: continue
-            for n in range(1, 10000):
-                f = f"{par}{str(n).zfill(4)}"
-                if f not in usados: return f
-    return "ZZ9999"
-
-# ------------ FSM (7 campos, sin costo/rfc/domicilio) ------------
+# ------------ FSM ------------
 class PermisoForm(StatesGroup):
     marca  = State()
     linea  = State()
@@ -178,7 +267,7 @@ class PermisoForm(StatesGroup):
     color  = State()
     nombre = State()
 
-# ------------ QR (síncrono) ------------
+# ------------ QR ------------
 def _make_qr_pixmap(folio: str):
     url = f"{URL_CONSULTA_BASE}/consulta/{folio}"
     qr  = qrcode.QRCode(version=2, error_correction=qrcode.constants.ERROR_CORRECT_M,
@@ -188,7 +277,7 @@ def _make_qr_pixmap(folio: str):
     buf = BytesIO(); img.save(buf, format="PNG"); buf.seek(0)
     return fitz.Pixmap(buf.read())
 
-# ------------ PDF PERMISO (síncrono) ------------
+# ------------ PDF PERMISO ------------
 def _generar_pdf_permiso(datos: dict) -> str:
     fol  = datos["folio"]
     path = f"{OUTPUT_DIR}/{fol}_permiso_tmp.pdf"
@@ -203,7 +292,6 @@ def _generar_pdf_permiso(datos: dict) -> str:
             pg.insert_text((x,y), datos[c], fontsize=s, color=col)
         x,y,s,col = coords_guerrero["costo"]
         pg.insert_text((x,y), f"${datos['costo']}", fontsize=s, color=col)
-
         for k, val in [
             ("rot_folio",    fol),
             ("rot_fecha_exp",datos["fecha_exp"]),
@@ -220,7 +308,6 @@ def _generar_pdf_permiso(datos: dict) -> str:
         ]:
             pg.insert_text(coords_guerrero[k][:2], val,
                            fontsize=coords_guerrero[k][2], rotate=270)
-
         qr_pix = _make_qr_pixmap(fol)
         pg.insert_image(fitz.Rect(80, 460, 80+97, 460+97), pixmap=qr_pix, overlay=True)
         doc.save(path); doc.close()
@@ -229,7 +316,7 @@ def _generar_pdf_permiso(datos: dict) -> str:
     except Exception as e:
         print(f"[ERROR PERMISO] {e}"); return ""
 
-# ------------ PDF RECIBO (síncrono) ------------
+# ------------ PDF RECIBO ------------
 def _generar_pdf_recibo(datos: dict) -> str:
     fol  = datos["folio"]
     path = f"{OUTPUT_DIR}/{fol}_recibo_tmp.pdf"
@@ -254,7 +341,7 @@ def _generar_pdf_recibo(datos: dict) -> str:
     except Exception as e:
         print(f"[ERROR RECIBO] {e}"); return ""
 
-# ------------ PDF UNIFICADO (síncrono) ------------
+# ------------ PDF UNIFICADO ------------
 def _generar_pdf_unificado(datos: dict) -> str:
     fol   = datos["folio"]
     final = f"{OUTPUT_DIR}/{fol}_guerrero_completo.pdf"
@@ -274,7 +361,7 @@ def _generar_pdf_unificado(datos: dict) -> str:
     except Exception as e:
         print(f"[ERROR UNIFICADO] {e}"); return ""
 
-# ------------ Supabase insert (síncrono) ------------
+# ------------ Supabase insert ------------
 def _sb_insertar(datos: dict, user_id: int, username: str):
     hoy = datos["fecha_exp_obj"]; ven = datos["fecha_ven_obj"]
     supabase.table("folios_registrados").insert({
@@ -301,7 +388,6 @@ def _sb_insertar(datos: dict, user_id: int, username: str):
 async def _generar_y_enviar_background(chat_id: int, datos: dict, user_id: int, username: str):
     folio = datos["folio"]
     try:
-        # PDF en hilo separado — no bloquea el event loop
         pdf = await asyncio.to_thread(_generar_pdf_unificado, datos)
 
         kb = InlineKeyboardMarkup(inline_keyboard=[[
@@ -328,9 +414,7 @@ async def _generar_y_enviar_background(chat_id: int, datos: dict, user_id: int, 
                 "❌ Error al generar PDF. Intenta de nuevo con /chuleta")
             return
 
-        # Guardar en Supabase en hilo separado
         await asyncio.to_thread(_sb_insertar, datos, user_id, username)
-
         await iniciar_timer_eliminacion(user_id, folio)
 
         await bot.send_message(user_id,
@@ -368,7 +452,6 @@ async def chuleta_cmd(message: types.Message, state: FSMContext):
     await state.clear()
     folios_activos = obtener_folios_usuario(message.from_user.id)
 
-    # ── Mostrar folios activos con botón Detener por folio ────────────────────
     if folios_activos:
         lineas = []
         for f in folios_activos:
@@ -379,15 +462,13 @@ async def chuleta_cmd(message: types.Message, state: FSMContext):
                 lineas.append(f"• {f}  ({h}h {m}min restantes)")
             else:
                 lineas.append(f"• {f}  (sin timer)")
-
         botones = [
             [InlineKeyboardButton(text=f"⏹️ Detener {f}", callback_data=f"detener_{f}")]
             for f in folios_activos
         ]
         await message.answer(
             f"📋 FOLIOS GUERRERO ACTIVOS ({len(folios_activos)}):\n\n" +
-            "\n".join(lineas) +
-            "\n\nPuedes detener el timer de cualquier folio:",
+            "\n".join(lineas) + "\n\nPuedes detener el timer de cualquier folio:",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=botones)
         )
 
@@ -444,7 +525,7 @@ async def get_nombre(message: types.Message, state: FSMContext):
     await state.clear()
 
     nombre = message.text.strip().upper()
-    folio  = await asyncio.to_thread(_generar_folio_guerrero)
+    folio  = await _generar_folio_guerrero()   # async con Lock + watermark
     hoy    = datetime.now()
     ven    = hoy + timedelta(days=30)
 
@@ -471,7 +552,6 @@ async def get_nombre(message: types.Message, state: FSMContext):
         parse_mode="HTML"
     )
 
-    # PDF en background — no bloquea el webhook
     asyncio.create_task(
         _generar_y_enviar_background(
             message.chat.id, datos_pdf,
@@ -639,6 +719,8 @@ async def keep_alive():
 async def lifespan(app: FastAPI):
     global _keep_task
     try:
+        # Inicializa el contador desde watermark al arrancar
+        await asyncio.to_thread(_sb_inicializar_folio_gue)
         await bot.delete_webhook(drop_pending_updates=True)
         if BASE_URL:
             wh = f"{BASE_URL}/webhook"
@@ -647,7 +729,8 @@ async def lifespan(app: FastAPI):
             _keep_task = asyncio.create_task(keep_alive())
         else:
             print("[POLLING] Sin webhook")
-        print("[SISTEMA] Guerrero v7.0 listo")
+        print(f"[SISTEMA] Guerrero v7.1 listo — "
+              f"siguiente folio: {FOLIO_LETRAS}{str(_folio_counter['siguiente']).zfill(4)}")
         yield
     except Exception as e:
         print(f"[ERROR] {e}"); yield
@@ -657,7 +740,7 @@ async def lifespan(app: FastAPI):
             with suppress(asyncio.CancelledError): await _keep_task
         await bot.session.close()
 
-app = FastAPI(lifespan=lifespan, title="Sistema Guerrero", version="7.0")
+app = FastAPI(lifespan=lifespan, title="Sistema Guerrero", version="7.1")
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -669,7 +752,7 @@ async def webhook(request: Request):
         print(f"[ERROR webhook] {e}"); return {"ok": False, "error": str(e)}
 
 # ============================================================
-#  PÁGINA DE VERIFICACIÓN  /consulta/{folio}
+#  CONSULTA PÚBLICA
 # ============================================================
 @app.get("/consulta/{folio}", response_class=HTMLResponse)
 async def consulta(folio: str):
@@ -778,20 +861,16 @@ async def consulta(folio: str):
 @app.get("/")
 async def health():
     return {
-        "ok":            True,
-        "version":       "7.0",
-        "entidad":       "Guerrero",
-        "costo_fijo":    COSTO_FIJO,
-        "rfc_fijo":      RFC_FIJO,
-        "domicilio_fijo": DOMICILIO_FIJO,
-        "active_timers": len(timers_activos),
-        "consulta":      "/consulta/{folio}",
-        "fixes_v7": [
-            "Costo/RFC/Domicilio fijos — formulario solo pide 7 campos",
-            "asyncio.to_thread en PDF y Supabase — sin bloqueo del event loop",
-            "PDF generado en background task",
-            "/chuleta muestra folios activos con botones Detener individuales",
-            "/folios también con botones Detener por folio",
+        "ok":             True,
+        "version":        "7.1",
+        "entidad":        "Guerrero",
+        "costo_fijo":     COSTO_FIJO,
+        "siguiente_folio": f"{FOLIO_LETRAS}{str(_folio_counter['siguiente']).zfill(4)}",
+        "active_timers":  len(timers_activos),
+        "fixes_v7.1": [
+            "Watermark Supabase — contador nunca retrocede tras reinicio",
+            "Busca SIEMPRE hacia arriba desde el último asignado",
+            "asyncio.Lock — sin race conditions en concurrencia",
         ]
     }
 
