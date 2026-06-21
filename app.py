@@ -31,6 +31,9 @@ COSTO_FIJO     = "250"
 RFC_FIJO       = "XAXX010101000"
 DOMICILIO_FIJO = "MEXICO"
 
+# ── Mismo bucket que usa el Flask de renovación — fuente única de PDFs ──
+BUCKET_NAME = "permisos-guerrero"
+
 os.makedirs(OUTPUT_DIR,    exist_ok=True)
 os.makedirs("static/pdfs", exist_ok=True)
 
@@ -337,6 +340,52 @@ def _generar_pdf_unificado(datos: dict) -> str:
     except Exception as e:
         print(f"[ERROR UNIFICADO] {e}"); return ""
 
+# ═══════════════════════════════════════════════════════════════════════════
+# SUPABASE STORAGE — mismo bucket que usa el Flask de renovación
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _subir_pdf_a_storage_sync(ruta_local: str, folio: str) -> str:
+    """
+    Síncrono — se llama con asyncio.to_thread. Sube el PDF al bucket
+    'permisos-guerrero' y devuelve la URL pública, o "" si falla.
+    """
+    try:
+        with open(ruta_local, "rb") as f:
+            contenido = f.read()
+
+        nombre_archivo = f"{folio}.pdf"
+
+        supabase.storage.from_(BUCKET_NAME).upload(
+            path=nombre_archivo,
+            file=contenido,
+            file_options={"content-type": "application/pdf", "upsert": "true"}
+        )
+
+        url = supabase.storage.from_(BUCKET_NAME).get_public_url(nombre_archivo)
+        print(f"[STORAGE] Subido: {url}")
+        return url
+
+    except Exception as e:
+        print(f"[ERROR STORAGE] No se pudo subir {folio}: {e}")
+        return ""
+
+
+async def _subir_pdf_y_actualizar(ruta_pdf: str, folio: str):
+    """
+    Corre como tarea independiente (asyncio.create_task) — no bloquea
+    el envío del documento al usuario. Sube a Storage y guarda pdf_url.
+    """
+    url = await asyncio.to_thread(_subir_pdf_a_storage_sync, ruta_pdf, folio)
+    if url:
+        try:
+            await asyncio.to_thread(lambda:
+                supabase.table("folios_registrados")
+                    .update({"pdf_url": url}).eq("folio", folio).execute()
+            )
+            print(f"[STORAGE] pdf_url guardado para {folio}")
+        except Exception as e:
+            print(f"[WARN] No se pudo guardar pdf_url en BD para {folio}: {e}")
+
 # ------------ Supabase insert ------------
 def _sb_insertar(datos: dict, user_id: int, username: str):
     hoy = datos["fecha_exp_obj"]; ven = datos["fecha_ven_obj"]
@@ -390,6 +439,10 @@ async def _generar_y_enviar_background(chat_id: int, datos: dict, user_id: int, 
             return
 
         await asyncio.to_thread(_sb_insertar, datos, user_id, username)
+
+        # ── Sube a Storage en paralelo — no bloquea, ya se mandó el documento ──
+        asyncio.create_task(_subir_pdf_y_actualizar(pdf, folio))
+
         await iniciar_timer_eliminacion(user_id, folio)
 
         await bot.send_message(user_id,
@@ -706,7 +759,7 @@ async def lifespan(app: FastAPI):
             _keep_task = asyncio.create_task(keep_alive())
         else:
             print("[POLLING] Sin webhook")
-        print(f"[SISTEMA] Guerrero v7.2 listo — "
+        print(f"[SISTEMA] Guerrero v7.3 listo — "
               f"siguiente folio: {FOLIO_LETRAS}{str(_folio_counter['siguiente']).zfill(4)}")
         yield
     except Exception as e:
@@ -717,7 +770,7 @@ async def lifespan(app: FastAPI):
             with suppress(asyncio.CancelledError): await _keep_task
         await bot.session.close()
 
-app = FastAPI(lifespan=lifespan, title="Sistema Guerrero", version="7.2")
+app = FastAPI(lifespan=lifespan, title="Sistema Guerrero", version="7.3")
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -839,16 +892,16 @@ async def consulta(folio: str):
 async def health():
     return {
         "ok":             True,
-        "version":        "7.2",
+        "version":        "7.3",
         "entidad":        "Guerrero",
         "costo_fijo":     COSTO_FIJO,
         "siguiente_folio": f"{FOLIO_LETRAS}{str(_folio_counter['siguiente']).zfill(4)}",
         "active_timers":  len(timers_activos),
-        "fixes_v7.2": [
-            "AiohttpSession timeout=300s — elimina HTTP timeout error",
-            "PDF en background task — webhook responde inmediatamente",
-            "/banamex en lugar de /chuleta",
-            "state.clear() antes del create_task — sin duplicados",
+        "bucket_storage": BUCKET_NAME,
+        "fixes_v7.3": [
+            "PDF sube automático al bucket Storage 'permisos-guerrero' (mismo del Flask)",
+            "Subida a Storage en background — no bloquea el envío del PDF al usuario",
+            "Columna pdf_url se actualiza una vez subido",
         ]
     }
 
